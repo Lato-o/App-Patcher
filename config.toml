@@ -50,12 +50,26 @@ arch = "both"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 
 [YouTube-Extended]
-enabled = false
+enabled = true
 app-name = "YouTube"
-patches-source = "inotia00/revanced-patches"
+patches-source = "anddea/revanced-patches"
 cli-source = "inotia00/revanced-cli"
 rv-brand = "ReVanced Extended"
 build-mode = "both"
+patches-version = "dev"
+arch = "arm64-v8a"
+included-patches = """\
+'Custom header for YouTube' \
+'Hide Shorts dimming' \
+'Hide shortcuts' \
+'MaterialYou' \
+"""
+riplib = true
+excluded-patches = """\
+'Custom branding icon for YouTube' \
+'Custom branding name for YouTube' \
+"""
+patcher-args = "-e 'Visual preferences icons for YouTube' -OsettingsMenuIcon=gear -e 'Settings for YouTube' -OrvxSettingsLabel='ReVanced Extended' -e 'Snackbar components' -OdarkThemeBackgroundColor=@android:color/black"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 
 [Twitch]
