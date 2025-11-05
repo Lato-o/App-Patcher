@@ -56,6 +56,7 @@ patches-source = "anddea/revanced-patches"
 cli-source = "inotia00/revanced-cli"
 rv-brand = "ReVanced Extended"
 build-mode = "module"
+module-prop-name= "Youtube Revanced Extended"
 patches-version = "dev"
 arch = "arm64-v8a"
 included-patches = """\
