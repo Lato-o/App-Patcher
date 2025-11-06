@@ -75,7 +75,7 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 
 [Soundcloud]
 enabled = true
-apkmirror-dlurl = "https://www.apkmirror.com/apk/soundcloud/soundcloud-soundcloud/"
+#apkmirror-dlurl = "https://www.apkmirror.com/apk/soundcloud/soundcloud-soundcloud/"
 uptodown-dlurl = "https://soundcloud.fr.uptodown.com/android"
 patches-source = "revanced/revanced-patches"
 build-mode = "both"
