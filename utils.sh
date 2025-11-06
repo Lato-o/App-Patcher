@@ -683,12 +683,41 @@ build_rv() {
 
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
-		# Extraire la version complète des patches depuis le nom du fichier JAR
-		# Format attendu: revanced-patches-3.15.0-dev.1.rvp
-		# Utiliser la même méthode que get_rv_prebuilts pour extraire le tag_name
-		local patches_file=$(basename "$rv_patches_jar")
-		local rv_patches_ver=$(cut -d'-' -f3- <<<"$patches_file")
-		rv_patches_ver="v${rv_patches_ver%.rvp}"
+		# Extraire la version complète des patches depuis l'API GitHub
+		# Utiliser patches_src et patches_ver pour récupérer le tag_name depuis l'API
+		local patches_src=${args[patches_src]}
+		local patches_ver=${args[patches_ver]}
+		local rv_patches_ver=""
+		
+		# Récupérer le tag_name depuis l'API GitHub
+		local rv_rel="https://api.github.com/repos/${patches_src}/releases"
+		if [ "$patches_ver" = "dev" ]; then
+			local resp
+			resp=$(gh_req "$rv_rel" -) || rv_patches_ver="dev"
+			if [ -n "$resp" ]; then
+				rv_patches_ver=$(jq -e -r '.[0] | .tag_name' <<<"$resp" 2>/dev/null || echo "dev")
+			fi
+		elif [ "$patches_ver" = "latest" ]; then
+			local resp
+			resp=$(gh_req "$rv_rel/latest" -) || rv_patches_ver="latest"
+			if [ -n "$resp" ]; then
+				rv_patches_ver=$(jq -e -r '.tag_name' <<<"$resp" 2>/dev/null || echo "latest")
+			fi
+		else
+			# Version spécifique, utiliser directement avec le préfixe "v" si nécessaire
+			if [[ ! "$patches_ver" =~ ^v ]]; then
+				rv_patches_ver="v${patches_ver}"
+			else
+				rv_patches_ver="$patches_ver"
+			fi
+		fi
+		
+		# Si on n'a pas réussi à récupérer depuis l'API, essayer depuis le nom du fichier
+		if [ -z "$rv_patches_ver" ] || [ "$rv_patches_ver" = "dev" ] || [ "$rv_patches_ver" = "latest" ]; then
+			local patches_file=$(basename "$rv_patches_jar")
+			rv_patches_ver=$(cut -d'-' -f3- <<<"$patches_file")
+			rv_patches_ver="v${rv_patches_ver%.rvp}"
+		fi
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \

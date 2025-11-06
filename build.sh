@@ -83,6 +83,8 @@ for table_name in $(toml_get_table_names); do
 	read -r rv_cli_jar rv_patches_jar <<<"$RVP"
 	app_args[cli]=$rv_cli_jar
 	app_args[ptjar]=$rv_patches_jar
+	app_args[patches_src]=$patches_src
+	app_args[patches_ver]=$patches_ver
 	if [[ -v cliriplib[${app_args[cli]}] ]]; then app_args[riplib]=${cliriplib[${app_args[cli]}]}; else
 		if [[ $(java -jar "${app_args[cli]}" patch 2>&1) == *rip-lib* ]]; then
 			cliriplib[${app_args[cli]}]=true
