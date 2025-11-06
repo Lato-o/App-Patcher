@@ -1,0 +1,114 @@
+name: Watch Patches Releases
+on:
+  schedule:
+    # Vérifie toutes les heures si de nouvelles releases sont disponibles
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check ReVanced patches releases
+        id: check_revanced
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: 'ReVanced',
+              repo: 'revanced-patches',
+              per_page: 1
+            });
+
+            if (releases.length > 0) {
+              const latestRelease = releases[0];
+              const releaseTag = latestRelease.tag_name;
+              
+              // Récupérer la dernière release vérifiée depuis les variables d'environnement ou les secrets
+              // Pour la première exécution, on déclenche le build
+              const lastCheckedTag = process.env.LAST_REVANCED_TAG || '';
+              
+              // Vérifier si c'est une nouvelle release (différente de la dernière vérifiée)
+              // ou publiée dans les dernières 30 minutes (pour éviter les faux positifs)
+              const releaseDate = new Date(latestRelease.published_at);
+              const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+              
+              if (releaseTag !== lastCheckedTag && releaseDate > thirtyMinutesAgo) {
+                console.log(`Nouvelle release ReVanced détectée: ${releaseTag}`);
+                await github.rest.repos.createDispatchEvent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event_type: 'revanced-patches-release',
+                  client_payload: {
+                    tag: releaseTag,
+                    repo: 'ReVanced/revanced-patches'
+                  }
+                });
+                // Déclencher directement le workflow de build
+                const { data: repo } = await github.rest.repos.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'build.yml',
+                  ref: repo.default_branch || 'main'
+                });
+              } else {
+                console.log(`Pas de nouvelle release ReVanced. Dernière: ${releaseTag}`);
+              }
+            }
+
+      - name: Check anddea patches releases
+        id: check_anddea
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: releases } = await github.rest.repos.listReleases({
+              owner: 'anddea',
+              repo: 'revanced-patches',
+              per_page: 1
+            });
+
+            if (releases.length > 0) {
+              const latestRelease = releases[0];
+              const releaseTag = latestRelease.tag_name;
+              
+              // Récupérer la dernière release vérifiée depuis les variables d'environnement ou les secrets
+              // Pour la première exécution, on déclenche le build
+              const lastCheckedTag = process.env.LAST_ANDEA_TAG || '';
+              
+              // Vérifier si c'est une nouvelle release (différente de la dernière vérifiée)
+              // ou publiée dans les dernières 30 minutes (pour éviter les faux positifs)
+              const releaseDate = new Date(latestRelease.published_at);
+              const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+              
+              if (releaseTag !== lastCheckedTag && releaseDate > thirtyMinutesAgo) {
+                console.log(`Nouvelle release anddea détectée: ${releaseTag}`);
+                await github.rest.repos.createDispatchEvent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event_type: 'anddea-patches-release',
+                  client_payload: {
+                    tag: releaseTag,
+                    repo: 'anddea/revanced-patches'
+                  }
+                });
+                // Déclencher directement le workflow de build
+                const { data: repo } = await github.rest.repos.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'build.yml',
+                  ref: repo.default_branch || 'main'
+                });
+              } else {
+                console.log(`Pas de nouvelle release anddea. Dernière: ${releaseTag}`);
+              }
+            }

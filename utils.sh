@@ -683,11 +683,16 @@ build_rv() {
 
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
-		local rv_patches_ver="${rv_patches_jar##*-}"
+		# Extraire la version complète des patches depuis le nom du fichier JAR
+		# Format attendu: revanced-patches-3.15.0-dev.1.rvp
+		# Utiliser la même méthode que get_rv_prebuilts pour extraire le tag_name
+		local patches_file=$(basename "$rv_patches_jar")
+		local rv_patches_ver=$(cut -d'-' -f3- <<<"$patches_file")
+		rv_patches_ver="v${rv_patches_ver%.rvp}"
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \
-			"${version} (patches ${rv_patches_ver%%.rvp})" \
+			"${version} (patches ${rv_patches_ver})" \
 			"${app_name} ${args[rv_brand]} Magisk module" \
 			"https://raw.githubusercontent.com/${GITHUB_REPOSITORY-}/update/${upj}" \
 			"$base_template"
