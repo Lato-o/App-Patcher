@@ -2,7 +2,7 @@ name: Watch Patches Releases
 on:
   schedule:
     # Vérifie toutes les heures si de nouvelles releases sont disponibles
-    - cron: "0 */6 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
