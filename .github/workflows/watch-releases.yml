@@ -9,12 +9,18 @@ jobs:
   check-releases:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Check ReVanced patches releases
         id: check_revanced
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
+            const path = require('path');
+
             const { data: releases } = await github.rest.repos.listReleases({
               owner: 'ReVanced',
               repo: 'revanced-patches',
@@ -25,17 +31,23 @@ jobs:
               const latestRelease = releases[0];
               const releaseTag = latestRelease.tag_name;
               
-              // Récupérer la dernière release vérifiée depuis les variables d'environnement ou les secrets
-              // Pour la première exécution, on déclenche le build
-              const lastCheckedTag = process.env.LAST_REVANCED_TAG || '';
+              // Lire la dernière release vérifiée depuis un fichier
+              const lastCheckedFile = path.join(process.cwd(), '.last-revanced-tag');
+              let lastCheckedTag = '';
+              try {
+                if (fs.existsSync(lastCheckedFile)) {
+                  lastCheckedTag = fs.readFileSync(lastCheckedFile, 'utf8').trim();
+                }
+              } catch (e) {
+                console.log('Fichier de dernière release non trouvé, première exécution');
+              }
               
-              // Vérifier si c'est une nouvelle release (différente de la dernière vérifiée)
-              // ou publiée dans les dernières 30 minutes (pour éviter les faux positifs)
-              const releaseDate = new Date(latestRelease.published_at);
-              const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-              
-              if (releaseTag !== lastCheckedTag && releaseDate > thirtyMinutesAgo) {
-                console.log(`Nouvelle release ReVanced détectée: ${releaseTag}`);
+              if (releaseTag !== lastCheckedTag) {
+                console.log(`Nouvelle release ReVanced détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
+                
+                // Sauvegarder la nouvelle release
+                fs.writeFileSync(lastCheckedFile, releaseTag);
+                
                 await github.rest.repos.createDispatchEvent({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -67,6 +79,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
+            const path = require('path');
+
             const { data: releases } = await github.rest.repos.listReleases({
               owner: 'anddea',
               repo: 'revanced-patches',
@@ -77,17 +92,23 @@ jobs:
               const latestRelease = releases[0];
               const releaseTag = latestRelease.tag_name;
               
-              // Récupérer la dernière release vérifiée depuis les variables d'environnement ou les secrets
-              // Pour la première exécution, on déclenche le build
-              const lastCheckedTag = process.env.LAST_ANDEA_TAG || '';
+              // Lire la dernière release vérifiée depuis un fichier
+              const lastCheckedFile = path.join(process.cwd(), '.last-anddea-tag');
+              let lastCheckedTag = '';
+              try {
+                if (fs.existsSync(lastCheckedFile)) {
+                  lastCheckedTag = fs.readFileSync(lastCheckedFile, 'utf8').trim();
+                }
+              } catch (e) {
+                console.log('Fichier de dernière release non trouvé, première exécution');
+              }
               
-              // Vérifier si c'est une nouvelle release (différente de la dernière vérifiée)
-              // ou publiée dans les dernières 30 minutes (pour éviter les faux positifs)
-              const releaseDate = new Date(latestRelease.published_at);
-              const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-              
-              if (releaseTag !== lastCheckedTag && releaseDate > thirtyMinutesAgo) {
-                console.log(`Nouvelle release anddea détectée: ${releaseTag}`);
+              if (releaseTag !== lastCheckedTag) {
+                console.log(`Nouvelle release anddea détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
+                
+                // Sauvegarder la nouvelle release
+                fs.writeFileSync(lastCheckedFile, releaseTag);
+                
                 await github.rest.repos.createDispatchEvent({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -112,3 +133,11 @@ jobs:
                 console.log(`Pas de nouvelle release anddea. Dernière: ${releaseTag}`);
               }
             }
+
+      - name: Commit last checked tags
+        if: always()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          file_pattern: .last-*-tag
+          commit_message: Update last checked release tags
+          skip_dirty_check: true
