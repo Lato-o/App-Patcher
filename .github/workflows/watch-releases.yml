@@ -48,15 +48,6 @@ jobs:
                 // Sauvegarder la nouvelle release
                 fs.writeFileSync(lastCheckedFile, releaseTag);
                 
-                await github.rest.repos.createDispatchEvent({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  event_type: 'revanced-patches-release',
-                  client_payload: {
-                    tag: releaseTag,
-                    repo: 'ReVanced/revanced-patches'
-                  }
-                });
                 // Déclencher directement le workflow de build
                 const { data: repo } = await github.rest.repos.get({
                   owner: context.repo.owner,
@@ -109,15 +100,6 @@ jobs:
                 // Sauvegarder la nouvelle release
                 fs.writeFileSync(lastCheckedFile, releaseTag);
                 
-                await github.rest.repos.createDispatchEvent({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  event_type: 'anddea-patches-release',
-                  client_payload: {
-                    tag: releaseTag,
-                    repo: 'anddea/revanced-patches'
-                  }
-                });
                 // Déclencher directement le workflow de build
                 const { data: repo } = await github.rest.repos.get({
                   owner: context.repo.owner,

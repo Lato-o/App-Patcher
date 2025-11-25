@@ -1,9 +1,5 @@
 name: Build Modules
 on:
-  push:
-    branches:
-      - "main"
-
   workflow_call:
     inputs:
       from_ci:
