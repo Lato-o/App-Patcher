@@ -74,7 +74,7 @@ Note that the <a href="../../actions/workflows/ci.yml">CI workflow</a> is schedu
 
 - Grab your modules and APKs from [releases](https://github.com/Lato-o/Revanced-Builder/releases)
 
-Also see [`CONFIG.md`](./config.toml) for more information.
+Also see [`config.toml`](./config.toml) for more information.
 
 <!--
 ## Building Locally
