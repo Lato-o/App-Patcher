@@ -121,8 +121,13 @@ jobs:
 
       - name: Commit last checked tags
         if: always()
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          file_pattern: .last-*-tag
-          commit_message: Update last checked release tags
-          skip_dirty_check: true
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .last-*-tag || true
+          if git diff --staged --quiet; then
+            echo "Aucun changement à committer"
+          else
+            git commit -m "Update last checked release tags" || exit 0
+            git push || exit 0
+          fi
