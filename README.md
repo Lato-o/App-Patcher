@@ -70,7 +70,6 @@ Note that the <a href="../../actions/workflows/ci.yml">CI workflow</a> is schedu
 
 > **Note:** If you already have SoundCloud installed from the Play Store, you must uninstall it first before installing the patched version.
 
-- Grab your modules and APKs from [releases](https://github.com/Lato-o/Revanced-Builder/releases)
 
 Also see [`config.toml`](./config.toml) for more information.
 
