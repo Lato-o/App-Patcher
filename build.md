@@ -12,5 +12,5 @@ Patches: anddea/patches-3.15.0-dev.7.rvp
 [Changelog](https://github.com/anddea/revanced-patches/releases/tag/v3.15.0-dev.7)
 
 CLI: revanced/revanced-cli-5.0.1-all.jar  
-Patches: revanced/patches-5.46.0.rvp  
-[Changelog](https://github.com/revanced/revanced-patches/releases/tag/v5.46.0)  
+Patches: revanced/patches-5.47.0.rvp  
+[Changelog](https://github.com/revanced/revanced-patches/releases/tag/v5.47.0)  
