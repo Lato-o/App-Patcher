@@ -51,12 +51,15 @@ get_rv_prebuilts() {
 	for src_ver in "$cli_src CLI $cli_ver revanced-cli" "$patches_src Patches $patches_ver patches"; do
 		set -- $src_ver
 		local src=$1 tag=$2 ver=${3-} fprefix=$4
-		local ext
+		local ext exts
 		if [ "$tag" = "CLI" ]; then
 			ext="jar"
+			exts=("jar")
 			local grab_cl=false
 		elif [ "$tag" = "Patches" ]; then
+			# MorpheApp utilise .jar au lieu de .rvp pour les patches
 			ext="rvp"
+			exts=("rvp" "jar")
 			local grab_cl=true
 		else abort unreachable; fi
 		local dir=${src%/*}
@@ -78,15 +81,29 @@ get_rv_prebuilts() {
 		fi
 
 		local url file tag_name name
-		file=$(find "$dir" -name "${fprefix}-${name_ver#v}.${ext}" -type f 2>/dev/null)
+		# Chercher d'abord dans les fichiers existants avec toutes les extensions possibles
+		file=""
+		for e in "${exts[@]}"; do
+			file=$(find "$dir" -name "${fprefix}-${name_ver#v}.${e}" -type f 2>/dev/null | head -1)
+			if [ -n "$file" ]; then break; fi
+		done
 		if [ -z "$file" ]; then
-			local resp asset name
+			local resp asset name found_asset=false
 			resp=$(gh_req "$rv_rel" -) || return 1
 			tag_name=$(jq -r '.tag_name' <<<"$resp")
-			asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp") || {
-				epr "No asset found with extension '$ext' in release $tag_name for ${src}"
+			# Essayer toutes les extensions possibles
+			for e in "${exts[@]}"; do
+				asset=$(jq -e -r ".assets[] | select(.name | endswith(\".${e}\"))" <<<"$resp" 2>/dev/null)
+				if [ -n "$asset" ] && [ "$asset" != "null" ]; then
+					ext="$e"
+					found_asset=true
+					break
+				fi
+			done
+			if [ "$found_asset" = false ]; then
+				epr "No asset found with extensions ${exts[*]} in release $tag_name for ${src}"
 				return 1
-			}
+			fi
 			url=$(jq -r .browser_download_url <<<"$asset")
 			if [ -z "$url" ] || [ "$url" = "null" ]; then
 				# Fallback sur l'URL de l'API si browser_download_url n'est pas disponible
@@ -108,9 +125,26 @@ get_rv_prebuilts() {
 			local for_err=$file
 			if [ "$ver" = "latest" ]; then
 				file=$(grep -v '/[^/]*dev[^/]*$' <<<"$file" | head -1)
-			else file=$(grep "/[^/]*${ver#v}[^/]*\$" <<<"$file" | head -1); fi
+			else 
+				# Chercher avec toutes les extensions possibles
+				local found_file=""
+				for e in "${exts[@]}"; do
+					found_file=$(grep "/[^/]*${ver#v}[^/]*\.${e}\$" <<<"$file" | head -1)
+					if [ -n "$found_file" ]; then
+						file="$found_file"
+						ext="$e"
+						break
+					fi
+				done
+				if [ -z "$file" ]; then
+					file=$(grep "/[^/]*${ver#v}[^/]*\$" <<<"$file" | head -1)
+				fi
+			fi
 			if [ -z "$file" ]; then abort "filter fail: '$for_err' with '$ver'"; fi
 			name=$(basename "$file")
+			# Extraire l'extension réelle du fichier
+			local actual_ext="${name##*.}"
+			if [ "$actual_ext" != "$ext" ]; then ext="$actual_ext"; fi
 			tag_name=$(cut -d'-' -f3- <<<"$name")
 			tag_name=v${tag_name%.*}
 		fi
