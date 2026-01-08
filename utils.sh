@@ -83,15 +83,25 @@ get_rv_prebuilts() {
 			local resp asset name
 			resp=$(gh_req "$rv_rel" -) || return 1
 			tag_name=$(jq -r '.tag_name' <<<"$resp")
-			asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp") || return 1
+			asset=$(jq -e -r ".assets[] | select(.name | endswith(\"$ext\"))" <<<"$resp") || {
+				epr "No asset found with extension '$ext' in release $tag_name for ${src}"
+				return 1
+			}
 			url=$(jq -r .browser_download_url <<<"$asset")
 			if [ -z "$url" ] || [ "$url" = "null" ]; then
 				# Fallback sur l'URL de l'API si browser_download_url n'est pas disponible
 				url=$(jq -r .url <<<"$asset")
 			fi
+			if [ -z "$url" ] || [ "$url" = "null" ]; then
+				epr "No download URL found for asset in release $tag_name for ${src}"
+				return 1
+			fi
 			name=$(jq -r .name <<<"$asset")
 			file="${dir}/${name}"
-			gh_dl "$file" "$url" >&2 || return 1
+			gh_dl "$file" "$url" >&2 || {
+				epr "Failed to download ${name} from ${url}"
+				return 1
+			}
 			echo "$tag: $(cut -d/ -f1 <<<"$src")/${name}  " >>"${cl_dir}/changelog.md"
 		else
 			grab_cl=false
@@ -213,7 +223,14 @@ gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
 gh_dl() {
 	if [ ! -f "$1" ]; then
 		pr "Getting '$1' from '$2'"
-		_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream"
+		# Pour les URLs de téléchargement directe (browser_download_url), utiliser req au lieu de gh_req
+		# car elles ne nécessitent pas d'authentification
+		if [[ "$2" =~ ^https://github.com/.*/releases/download/ ]]; then
+			req "$2" "$1" || return 1
+		else
+			# Pour les URLs de l'API GitHub, utiliser l'authentification
+			_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream" || return 1
+		fi
 	fi
 }
 
