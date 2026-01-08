@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
   repository_dispatch:
-    types: [revanced-patches-release, anddea-patches-release]
+    types: [revanced-patches-release, anddea-patches-release, morphe-patches-release]
 
 jobs:
   run:
