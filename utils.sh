@@ -57,9 +57,10 @@ get_rv_prebuilts() {
 			exts=("jar")
 			local grab_cl=false
 		elif [ "$tag" = "Patches" ]; then
-			# MorpheApp utilise .jar au lieu de .rvp pour les patches
+			# MorpheApp utilise .mpp au lieu de .rvp pour les patches
+			# Support de .rvp (ReVanced standard), .jar (certains forks), et .mpp (MorpheApp)
 			ext="rvp"
-			exts=("rvp" "jar")
+			exts=("rvp" "jar" "mpp")
 			local grab_cl=true
 		else abort unreachable; fi
 		local dir=${src%/*}
