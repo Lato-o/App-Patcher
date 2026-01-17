@@ -157,18 +157,25 @@ get_rv_prebuilts() {
 		if [ "$tag" = "Patches" ]; then
 			if [ $grab_cl = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
 			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
-				if ! (
-					mkdir -p "${file}-zip" || return 1
-					unzip -qo "${file}" -d "${file}-zip" || return 1
-					java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.rve" "${file}-zip/extensions/shared-patched.rve" || return 1
-					mv -f "${file}-zip/extensions/shared-patched.rve" "${file}-zip/extensions/shared.rve" || return 1
-					rm "${file}" || return 1
-					cd "${file}-zip" || abort
-					zip -0rq "${CWD}/${file}" . || return 1
-				) >&2; then
-					echo >&2 "Patching revanced-integrations failed"
+				# Ne pas patcher les fichiers .mpp (MorpheApp) car ils ont une structure différente
+				local file_ext="${file##*.}"
+				if [ "$file_ext" != "mpp" ]; then
+					if ! (
+						mkdir -p "${file}-zip" || return 1
+						unzip -qo "${file}" -d "${file}-zip" || return 1
+						# Vérifier que le fichier shared.rve existe avant de le patcher
+						if [ -f "${file}-zip/extensions/shared.rve" ]; then
+							java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.rve" "${file}-zip/extensions/shared-patched.rve" || return 1
+							mv -f "${file}-zip/extensions/shared-patched.rve" "${file}-zip/extensions/shared.rve" || return 1
+						fi
+						rm "${file}" || return 1
+						cd "${file}-zip" || abort
+						zip -0rq "${CWD}/${file}" . || return 1
+					) >&2; then
+						echo >&2 "Patching revanced-integrations failed"
+					fi
+					rm -r "${file}-zip" || :
 				fi
-				rm -r "${file}-zip" || :
 			fi
 		fi
 		echo -n "$file "
