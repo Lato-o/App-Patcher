@@ -43,8 +43,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=$(gh release list -L 1 | awk -F '\t' '{print $3}')
-          if [ -z "$TAG" ]; then TAG=0; fi
+          TAG=$(gh release list -L 1 2>/dev/null | awk -F '\t' '{print $3}' || echo "")
+          if [ -z "$TAG" ] || ! [[ "$TAG" =~ ^[0-9]+$ ]]; then TAG=0; fi
           echo "NEXT_VER_CODE=$((TAG + 1))" >> $GITHUB_OUTPUT
 
       - name: Build modules/APKs
@@ -59,9 +59,14 @@ jobs:
         run: |
           DELIM="$(openssl rand -hex 8)"
           echo "BUILD_LOG<<${DELIM}" >> "$GITHUB_OUTPUT"
-          cat build.md >> "$GITHUB_OUTPUT"
+          if [ -f "build.md" ]; then
+            cat build.md >> "$GITHUB_OUTPUT"
+            cp -f build.md build.tmp
+          else
+            echo "No build output available" >> "$GITHUB_OUTPUT"
+            touch build.tmp
+          fi
           echo "${DELIM}" >> "$GITHUB_OUTPUT"
-          cp -f build.md build.tmp
 
       - name: Upload modules to release
         uses: svenstaro/upload-release-action@v2
@@ -78,7 +83,11 @@ jobs:
         id: update_config
         run: |
           git checkout -f update || git switch --discard-changes --orphan update
-          cp -f build.tmp build.md
+          if [ -f "build.tmp" ]; then
+            cp -f build.tmp build.md
+          else
+            echo "No build output available" > build.md
+          fi
           get_update_json() {
             echo "{
             \"version\": \"$1\",
@@ -101,7 +110,9 @@ jobs:
           done
           cd ..
 
-          find . -name "*-update.json" | grep . || : >dummy-update.json
+          if ! find . -name "*-update.json" -type f | grep -q .; then
+            touch dummy-update.json
+          fi
 
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -132,7 +143,11 @@ jobs:
           MODULES=${MODULES#"$NL"}
           APKS=${APKS#"$NL"}
 
-          BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
+          if [ -f "../build.md" ]; then
+            BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
+          else
+            BODY="Build completed successfully"
+          fi
           MSG="*New build!*
 
           ${BODY}
