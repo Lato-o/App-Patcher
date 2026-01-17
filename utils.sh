@@ -94,7 +94,12 @@ get_rv_prebuilts() {
 			tag_name=$(jq -r '.tag_name' <<<"$resp")
 			# Essayer toutes les extensions possibles
 			for e in "${exts[@]}"; do
-				asset=$(jq -e -r ".assets[] | select(.name | endswith(\".${e}\"))" <<<"$resp" 2>/dev/null)
+				# Prendre seulement le premier asset qui correspond, en préférant ceux sans "dev" dans le nom
+				asset=$(jq -e -c "[.assets[] | select(.name | endswith(\".${e}\")) | select(.name | contains(\"dev\") | not)] | .[0]" <<<"$resp" 2>/dev/null)
+				if [ -z "$asset" ] || [ "$asset" = "null" ]; then
+					# Si aucun asset sans "dev" n'est trouvé, prendre le premier qui correspond
+					asset=$(jq -e -c "[.assets[] | select(.name | endswith(\".${e}\"))] | .[0]" <<<"$resp" 2>/dev/null)
+				fi
 				if [ -n "$asset" ] && [ "$asset" != "null" ]; then
 					ext="$e"
 					found_asset=true
