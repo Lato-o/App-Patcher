@@ -13,11 +13,11 @@ CLI: inotia00/revanced-cli-5.0.2-all.jar
 Patches: anddea/patches-3.15.0-dev.9.rvp  
 [Changelog](https://github.com/anddea/revanced-patches/releases/tag/v3.15.0-dev.9)
 
-CLI: MorpheApp/morphe-cli-1.0.0-all.jar  
-Patches: MorpheApp/patches-1.3.1-dev.4.mpp  
-[Changelog](https://github.com/MorpheApp/morphe-patches/releases/tag/v1.3.1-dev.4)
+CLI: MorpheApp/morphe-cli-1.1.0-all.jar  
+Patches: MorpheApp/patches-1.6.0-dev.4.mpp  
+[Changelog](https://github.com/MorpheApp/morphe-patches/releases/tag/v1.6.0-dev.4)
 
-CLI: MorpheApp/morphe-cli-1.0.0-all.jar  
+CLI: MorpheApp/morphe-cli-1.1.0-all.jar  
 CLI: revanced/revanced-cli-5.0.1-all.jar  
 Patches: revanced/patches-5.47.0.rvp  
 [Changelog](https://github.com/revanced/revanced-patches/releases/tag/v5.47.0)  
