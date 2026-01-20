@@ -50,7 +50,7 @@ arch = "both"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 
 [YouTube-Extended]
-enabled = true
+enabled = false
 app-name = "YouTube"
 patches-source = "anddea/revanced-patches"
 cli-source = "inotia00/revanced-cli"
@@ -75,7 +75,7 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 
 
 [YoutubeMusic-Extended]
-enabled = true
+enabled = false
 app-name = "YouTube Music"
 patches-source = "anddea/revanced-patches"
 cli-source = "inotia00/revanced-cli"
