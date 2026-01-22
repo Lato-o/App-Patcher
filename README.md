@@ -32,6 +32,8 @@ Note that the <a href="../../actions/workflows/ci.yml">CI workflow</a> is schedu
 
 ## Installation
 
+Last [RVExtended build](https://github.com/Lato-o/App-Patcher/releases/tag/44)
+
 ### Available Applications
 
 | Application    | Type                      | Patches Provider                                                          | Patch Version                      | File   |
