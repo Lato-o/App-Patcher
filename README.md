@@ -5,7 +5,7 @@
 [![CI](https://github.com/j-hc/revanced-magisk-module/actions/workflows/ci.yml/badge.svg?event=schedule)](https://github.com/j-hc/revanced-magisk-module/actions/workflows/ci.yml)
 -->
 
-Extensive ReVanced builder
+ReVanced/ Morphe builder
 
 
 Use [**zygisk-detach**](https://github.com/j-hc/zygisk-detach) to detach YouTube and YT Music from Play Store if you are using magisk modules.
@@ -33,6 +33,8 @@ Note that the <a href="../../actions/workflows/ci.yml">CI workflow</a> is schedu
 ## Installation
 
 Last [RVExtended build](https://github.com/Lato-o/App-Patcher/releases/tag/44)
+
+Last [Morphe build](https://github.com/Lato-o/App-Patcher/releases/latest)
 
 ### Available Applications
 
