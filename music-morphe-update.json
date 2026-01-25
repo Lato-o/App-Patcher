@@ -1,6 +1,6 @@
 {
-  "version": "v8.40.54 (patches v1.8.0-dev.3)",
-  "versionCode": 48,
-  "zipUrl": "https://github.com/Lato-o/App-Patcher/releases/download/48/music-morphe-magisk-v8.40.54-arm64-v8a.zip",
+  "version": "v8.40.54 (patches v1.8.0-dev.9)",
+  "versionCode": 49,
+  "zipUrl": "https://github.com/Lato-o/App-Patcher/releases/download/49/music-morphe-magisk-v8.40.54-arm64-v8a.zip",
   "changelog": "https://raw.githubusercontent.com/Lato-o/App-Patcher/update/build.md"
 }
