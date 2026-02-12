@@ -265,12 +265,19 @@ _req() {
 		mv -f "$dlp" "$op"
 	fi
 }
-req() {
-	_req "$1" "$2" \
-		-H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+_req_headers() {
+	echo -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
 		-H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
 		-H "Accept-Language: en-US,en;q=0.9" \
-		-H "Referer: https://www.google.com/"
+		-H "Referer: ${1:-https://www.google.com/}"
+}
+req() {
+	_req "$1" "$2" $( _req_headers "https://www.google.com/" )
+}
+# Requête avec Referer personnalisé (nécessaire pour dw.uptodown.com)
+req_with_referer() {
+	local referer="$1" url="$2" output="$3"
+	_req "$url" "$output" $( _req_headers "$referer" )
 }
 gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
 gh_dl() {
@@ -551,11 +558,19 @@ dl_uptodown() {
 	fi
 	local data_url
 	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1
+	# dw.uptodown.com exige un Referer de la page Uptodown (sinon 404)
+	local dw_url="https://dw.uptodown.com/dwn/${data_url}"
+	local referer
+	if [ -n "${data_file_id-}" ]; then
+		referer="${uptodown_dlurl}/download/${data_file_id}-x"
+	else
+		referer="${uptodown_dlurl}/"
+	fi
 	if [ $is_bundle = true ]; then
-		req "https://dw.uptodown.com/dwn/${data_url}" "$output.apkm" || return 1
+		req_with_referer "$referer" "$dw_url" "$output.apkm" || return 1
 		merge_splits "${output}.apkm" "${output}"
 	else
-		req "https://dw.uptodown.com/dwn/${data_url}" "$output"
+		req_with_referer "$referer" "$dw_url" "$output"
 	fi
 }
 get_uptodown_pkg_name() { $HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)" <<<"$__UPTODOWN_RESP_PKG__"; }
@@ -617,12 +632,8 @@ build_rv() {
 	[ "${args[exclusive_patches]}" = true ] && p_patcher_args+=("--exclusive")
 
 	local tried_dl=()
-	# En CI (GitHub Actions), APKMirror renvoie souvent 403 : préférer archive puis uptodown
-	if [ -n "${GITHUB_ACTIONS-}" ]; then
-		dl_source_order="archive uptodown apkmirror"
-	else
-		dl_source_order="archive apkmirror uptodown"
-	fi
+	# Ordre : apkmirror d'abord, puis uptodown, puis archive en repli
+	dl_source_order="apkmirror uptodown archive"
 	for dl_p in $dl_source_order; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
