@@ -642,8 +642,13 @@ build_rv() {
 	[ "${args[exclusive_patches]}" = true ] && p_patcher_args+=("--exclusive")
 
 	local tried_dl=()
-	# Ordre : apkmirror d'abord, puis uptodown, puis archive en repli
-	dl_source_order="apkmirror uptodown archive"
+	# Morphe patches require a true universal APK for resources, prefer archive before uptodown.
+	if [[ "${args[patches_src],,}" == morpheapp/* ]]; then
+		dl_source_order="apkmirror archive uptodown"
+	else
+		# Ordre par défaut : apkmirror d'abord, puis uptodown, puis archive en repli
+		dl_source_order="apkmirror uptodown archive"
+	fi
 	for dl_p in $dl_source_order; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
