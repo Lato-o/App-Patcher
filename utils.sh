@@ -22,12 +22,15 @@ toml_get_table_names() { jq -r -e 'to_entries[] | select(.value | type == "objec
 toml_get_table_main() { jq -r -e 'to_entries | map(select(.value | type != "object")) | from_entries' <<<"$__TOML__"; }
 toml_get_table() { jq -r -e ".\"${1}\"" <<<"$__TOML__"; }
 toml_get() {
-	local op
+	local op quote_placeholder=$'\001'
 	op=$(jq -r ".\"${2}\" | values" <<<"$1")
 	if [ "$op" ]; then
 		op="${op#"${op%%[![:space:]]*}"}"
 		op="${op%"${op##*[![:space:]]}"}"
+		op=${op//\\\'/$quote_placeholder}
+		op=${op//"''"/$quote_placeholder}
 		op=${op//"'"/'"'}
+		op=${op//$quote_placeholder/$'\''}
 		echo "$op"
 	else return 1; fi
 }
@@ -35,7 +38,7 @@ toml_get() {
 pr() { echo -e "\033[0;32m[+] ${1}\033[0m"; }
 epr() {
 	echo >&2 -e "\033[0;31m[-] ${1}\033[0m"
-	if [ "${GITHUB_REPOSITORY-}" ]; then echo -e "::error::utils.sh [-] ${1}\n"; fi
+	if [ "${GITHUB_REPOSITORY-}" ]; then echo >&2 -e "::error::utils.sh [-] ${1}\n"; fi
 }
 abort() {
 	epr "ABORT: ${1-}"
@@ -538,26 +541,49 @@ dl_uptodown() {
 
 	local op resp data_code
 	data_code=$($HTMLQ "#detail-app-name" --attribute data-code <<<"$__UPTODOWN_RESP__")
+	if [ -z "$data_code" ]; then
+		data_code=$($HTMLQ "#detail-app-name" --attribute data-code <<<"$__UPTODOWN_RESP_PKG__" 2>/dev/null || true)
+	fi
+	if [ -z "$data_code" ]; then
+		data_code=$(sed -n 's/.*"app_id":[[:space:]]*\([0-9]\+\).*/\1/p' <<<"$__UPTODOWN_RESP__" | head -1)
+	fi
+	if [ -z "$data_code" ]; then
+		data_code=$(sed -n 's/.*"app_id":[[:space:]]*\([0-9]\+\).*/\1/p' <<<"$__UPTODOWN_RESP_PKG__" | head -1)
+	fi
+	if [ -z "$data_code" ]; then
+		epr "Could not resolve Uptodown data-code for ${uptodown_dlurl}"
+		return 1
+	fi
 	local versionURL=""
 	local is_bundle=false
 	local version_plain="${version%-release}"
 	if [ "$version_plain" = "$version" ] && [[ "$version" == *-* ]]; then
 		version_plain="${version%%-*}"
 	fi
-	for i in {1..20}; do
+	local found_version=false
+	for ((i = 1; i <= 120; i++)); do
 		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" -)
-		if ! op=$(jq -e -r --arg v "$version" '.data | map(select(.version == $v)) | .[0]' <<<"$resp"); then
-			if [ "$version_plain" != "$version" ]; then
-				if ! op=$(jq -e -r --arg v "$version_plain" '.data | map(select(.version == $v)) | .[0]' <<<"$resp"); then
-					continue
-				fi
-			else
-				continue
-			fi
+		# If response is not a valid versions payload, try next page.
+		if ! jq -e '.data | type == "array"' >/dev/null 2>&1 <<<"$resp"; then
+			continue
 		fi
+		# Stop early only when pagination is truly exhausted.
+		if jq -e '.data | length == 0' >/dev/null 2>&1 <<<"$resp"; then
+			break
+		fi
+		if ! op=$(jq -e -r --arg v "$version" --arg vp "$version_plain" '.data | map(select(
+			.version == $v or
+			.version == $vp or
+			(.version | startswith($vp + ".")) or
+			(.version | startswith($vp + "-"))
+		)) | .[0]' <<<"$resp"); then
+			continue
+		fi
+		found_version=true
 		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi
 		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
 	done
+	if [ "$found_version" != true ]; then return 1; fi
 	if [ -z "$versionURL" ]; then return 1; fi
 	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
 	resp=$(req "$versionURL" -) || return 1
@@ -588,6 +614,7 @@ dl_uptodown() {
 		if [ -z "${data_file_id-}" ] || [ "${file_type:-}" != "apk" ]; then
 			# Morphe patches need a universal apk; don't fallback to xapk splits for this source.
 			if [ "${uptodown_apk_only:-false}" = true ]; then
+				epr "Uptodown has no universal APK variant for version '${version}'"
 				return 1
 			fi
 			if [ -n "$xapk_file_id" ]; then
