@@ -265,19 +265,22 @@ _req() {
 		mv -f "$dlp" "$op"
 	fi
 }
-_req_headers() {
-	echo -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+req() {
+	# Requête HTTP générique avec en-têtes de navigateur
+	_req "$1" "$2" \
+		-H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
 		-H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
 		-H "Accept-Language: en-US,en;q=0.9" \
-		-H "Referer: ${1:-https://www.google.com/}"
+		-H "Referer: https://www.google.com/"
 }
-req() {
-	_req "$1" "$2" $( _req_headers "https://www.google.com/" )
-}
-# Requête avec Referer personnalisé (nécessaire pour dw.uptodown.com)
+# Requête avec Referer personnalisé (par ex. pour dw.uptodown.com)
 req_with_referer() {
 	local referer="$1" url="$2" output="$3"
-	_req "$url" "$output" $( _req_headers "$referer" )
+	_req "$url" "$output" \
+		-H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+		-H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8" \
+		-H "Accept-Language: en-US,en;q=0.9" \
+		-H "Referer: ${referer}"
 }
 gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
 gh_dl() {
