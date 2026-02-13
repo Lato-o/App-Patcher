@@ -551,20 +551,40 @@ dl_uptodown() {
 	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
 	resp=$(req "$versionURL" -) || return 1
 
-	local data_version files node_arch data_file_id
+	local data_version files node_arch data_file_id file_type
 	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || return 1
 	if [ "$data_version" ]; then
 		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1
+		local xapk_file_id=""
+		local xapk_resp=""
 		for ((n = 1; n < 12; n += 2)); do
 			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || return 1
 			if [ -z "$node_arch" ]; then return 1; fi
 			if ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi
 			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || return 1
-			if [ "$file_type" = "xapk" ]; then is_bundle=true; else is_bundle=false; fi
 			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || return 1
-			resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -)
-			break
+			if [ -z "$data_file_id" ]; then continue; fi
+			if [ "$file_type" = "apk" ]; then
+				is_bundle=false
+				resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -) || return 1
+				break
+			fi
+			if [ "$file_type" = "xapk" ] && [ -z "$xapk_file_id" ]; then
+				xapk_file_id="$data_file_id"
+				xapk_resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -) || return 1
+			fi
 		done
+		if [ -z "${data_file_id-}" ] || [ "${file_type:-}" != "apk" ]; then
+			# Morphe patches need a universal apk; don't fallback to xapk splits for this source.
+			if [ "${uptodown_apk_only:-false}" = true ]; then
+				return 1
+			fi
+			if [ -n "$xapk_file_id" ]; then
+				is_bundle=true
+				data_file_id="$xapk_file_id"
+				resp="$xapk_resp"
+			fi
+		fi
 	fi
 	local data_url
 	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1
@@ -588,8 +608,13 @@ get_uptodown_pkg_name() { $HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)"
 # -------------------- archive --------------------
 dl_archive() {
 	local url=$1 version=$2 output=$3 arch=$4
-	local path version=${version// /}
-	path=$(grep "${version_f#v}-${arch// /}" <<<"$__ARCHIVE_RESP__") || return 1
+	local path version_fallback=${version// /}
+	version_fallback=${version_fallback#v}
+	path=$(grep -F -- "${version_fallback}-${arch// /}.apk" <<<"$__ARCHIVE_RESP__" | head -1)
+	if [ -z "$path" ]; then
+		path=$(grep -F -- "${version_fallback}-all.apk" <<<"$__ARCHIVE_RESP__" | head -1)
+	fi
+	[ -z "$path" ] && return 1
 	req "${url}/${path}" "$output"
 }
 get_archive_resp() {
@@ -635,6 +660,7 @@ build_rv() {
 	local dl_from=${args[dl_from]}
 	local arch=${args[arch]}
 	local arch_f="${arch// /}"
+	local uptodown_apk_only=false
 
 	local p_patcher_args=()
 	if [ "${args[excluded_patches]}" ]; then p_patcher_args+=("$(join_args "${args[excluded_patches]}" -d)"); fi
@@ -645,6 +671,7 @@ build_rv() {
 	# Morphe patches require a true universal APK for resources, prefer archive before uptodown.
 	if [[ "${args[patches_src],,}" == morpheapp/* ]]; then
 		dl_source_order="apkmirror archive uptodown"
+		uptodown_apk_only=true
 	else
 		# Ordre par défaut : apkmirror d'abord, puis uptodown, puis archive en repli
 		dl_source_order="apkmirror uptodown archive"
