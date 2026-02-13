@@ -529,9 +529,10 @@ get_uptodown_resp() {
 get_uptodown_vers() { $HTMLQ --text ".version" <<<"$__UPTODOWN_RESP__"; }
 dl_uptodown() {
 	local uptodown_dlurl=$1 version=$2 output=$3 arch=$4 _dpi=$5
-	local apparch
+	local apparch accept_any_arch=false
 	if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
 	if [ "$arch" = all ]; then
+		accept_any_arch=true
 		apparch=('arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a')
 	else apparch=("$arch" 'arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a'); fi
 
@@ -539,10 +540,20 @@ dl_uptodown() {
 	data_code=$($HTMLQ "#detail-app-name" --attribute data-code <<<"$__UPTODOWN_RESP__")
 	local versionURL=""
 	local is_bundle=false
+	local version_plain="${version%-release}"
+	if [ "$version_plain" = "$version" ] && [[ "$version" == *-* ]]; then
+		version_plain="${version%%-*}"
+	fi
 	for i in {1..20}; do
 		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" -)
-		if ! op=$(jq -e -r ".data | map(select(.version == \"${version}\")) | .[0]" <<<"$resp"); then
-			continue
+		if ! op=$(jq -e -r --arg v "$version" '.data | map(select(.version == $v)) | .[0]' <<<"$resp"); then
+			if [ "$version_plain" != "$version" ]; then
+				if ! op=$(jq -e -r --arg v "$version_plain" '.data | map(select(.version == $v)) | .[0]' <<<"$resp"); then
+					continue
+				fi
+			else
+				continue
+			fi
 		fi
 		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi
 		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
@@ -560,7 +571,7 @@ dl_uptodown() {
 		for ((n = 1; n < 12; n += 2)); do
 			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || return 1
 			if [ -z "$node_arch" ]; then return 1; fi
-			if ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi
+			if [ "$accept_any_arch" != true ] && ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi
 			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || return 1
 			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || return 1
 			if [ -z "$data_file_id" ]; then continue; fi
