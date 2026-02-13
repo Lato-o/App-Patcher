@@ -28,6 +28,30 @@ jobs:
           fetch-depth: 0
           submodules: true
 
+      - name: Cache stamp
+        id: cache_stamp
+        run: echo "DATE=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore APK/prebuilt cache
+        id: apk_cache_restore
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ runner.os }}-apk-cache-${{ github.ref_name }}-${{ steps.cache_stamp.outputs.DATE }}
+          restore-keys: |
+            ${{ runner.os }}-apk-cache-${{ github.ref_name }}-
+            ${{ runner.os }}-apk-cache-
+          path: |
+            temp/*.apk
+            temp/*.apkm
+            temp/apkeditor.jar
+            temp/*-rv/*.jar
+            temp/*-rv/*.rvp
+            temp/*-rv/*.mpp
+            revanced-magisk/bin/arm64/cmpr
+            revanced-magisk/bin/arm/cmpr
+            revanced-magisk/bin/x86/cmpr
+            revanced-magisk/bin/x64/cmpr
+
       - name: Update config
         if: ${{ inputs.from_ci }}
         run: |
@@ -53,6 +77,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: $GITHUB_REPOSITORY
           NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
+
+      - name: Save APK/prebuilt cache
+        if: always() && steps.apk_cache_restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ steps.apk_cache_restore.outputs.cache-primary-key }}
+          path: |
+            temp/*.apk
+            temp/*.apkm
+            temp/apkeditor.jar
+            temp/*-rv/*.jar
+            temp/*-rv/*.rvp
+            temp/*-rv/*.mpp
+            revanced-magisk/bin/arm64/cmpr
+            revanced-magisk/bin/arm/cmpr
+            revanced-magisk/bin/x86/cmpr
+            revanced-magisk/bin/x64/cmpr
 
       - name: Get output
         id: get_output

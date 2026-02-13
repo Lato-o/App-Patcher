@@ -560,9 +560,16 @@ dl_uptodown() {
 	if [ "$version_plain" = "$version" ] && [[ "$version" == *-* ]]; then
 		version_plain="${version%%-*}"
 	fi
-	local found_version=false
+	local found_version=false empty_pages=0
 	for ((i = 1; i <= 120; i++)); do
-		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" -)
+		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" - 2>/dev/null || true)
+		if [ -z "$resp" ]; then
+			empty_pages=$((empty_pages + 1))
+			# End the scan after several consecutive missing pages.
+			if [ "$empty_pages" -ge 3 ]; then break; fi
+			continue
+		fi
+		empty_pages=0
 		# If response is not a valid versions payload, try next page.
 		if ! jq -e '.data | type == "array"' >/dev/null 2>&1 <<<"$resp"; then
 			continue
@@ -585,7 +592,13 @@ dl_uptodown() {
 	done
 	if [ "$found_version" != true ]; then return 1; fi
 	if [ -z "$versionURL" ]; then return 1; fi
-	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
+	versionURL=$(jq -e -r '
+		if (.extraURL // "") == "" then
+			.url + "/" + (.versionID | tostring)
+		else
+			.url + "/" + .extraURL + "/" + (.versionID | tostring)
+		end
+	' <<<"$versionURL")
 	resp=$(req "$versionURL" -) || return 1
 
 	local data_version files node_arch data_file_id file_type
