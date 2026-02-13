@@ -349,6 +349,8 @@ isoneof() {
 
 merge_splits() {
 	local bundle=$1 output=$2
+	local split_resigned_marker="${output}.merged-splits-resigned"
+	rm -f "$split_resigned_marker" || :
 	pr "Merging splits"
 	gh_dl "$TEMP_DIR/apkeditor.jar" "https://github.com/REAndroid/APKEditor/releases/download/V1.4.2/APKEditor-1.4.2.jar" >/dev/null || return 1
 	if ! OP=$(java -jar "$TEMP_DIR/apkeditor.jar" merge -i "${bundle}" -o "${bundle}.mzip" -clean-meta -f 2>&1); then
@@ -366,6 +368,9 @@ merge_splits() {
 	if isoneof "module" "${build_mode_arr[@]}"; then
 		patch_apk "${bundle}.zip" "${output}" "--exclusive" "${args[cli]}" "${args[ptjar]}"
 		local ret=$?
+		if [ $ret -eq 0 ]; then
+			: >"$split_resigned_marker"
+		fi
 	else
 		cp "${bundle}.zip" "${output}"
 		local ret=$?
@@ -692,6 +697,7 @@ build_rv() {
 	local version_f=${version// /}
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
+	local split_resigned_marker="${stock_apk}.merged-splits-resigned"
 	if [ ! -f "$stock_apk" ]; then
 		for dl_p in $dl_source_order; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
@@ -705,9 +711,13 @@ build_rv() {
 		done
 		if [ ! -f "$stock_apk" ]; then return 0; fi
 	fi
-	if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
-		epr "$pkg_name not building, apk signature mismatch '$stock_apk': $OP"
-		return 0
+	if [ -f "$split_resigned_marker" ]; then
+		pr "Skipping stock signature check for ${pkg_name} (merged split APK was re-signed during preprocessing)"
+	else
+		if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
+			epr "$pkg_name not building, apk signature mismatch '$stock_apk': $OP"
+			return 0
+		fi
 	fi
 	log "${table}: ${version}"
 
