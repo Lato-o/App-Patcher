@@ -547,8 +547,8 @@ get_apkmirror_resp() {
 
 # -------------------- uptodown --------------------
 get_uptodown_resp() {
-	__UPTODOWN_RESP__=$(req "${1}/versions" -)
-	__UPTODOWN_RESP_PKG__=$(req "${1}/download" -)
+	__UPTODOWN_RESP__=$(req "${1}/versions" - 2>/dev/null || req "${1}" - 2>/dev/null) || return 1
+	__UPTODOWN_RESP_PKG__=$(req "${1}/download" - 2>/dev/null || req "${1}/dw-telecharger" - 2>/dev/null || req "${1}" - 2>/dev/null) || return 1
 }
 get_uptodown_vers() { $HTMLQ --text ".version" <<<"$__UPTODOWN_RESP__"; }
 dl_uptodown() {
@@ -575,7 +575,7 @@ dl_uptodown() {
 		epr "Could not resolve Uptodown data-code for ${uptodown_dlurl}"
 		return 1
 	fi
-	local versionURL=""
+	local versionURL="" direct_page_url=""
 	local is_bundle=false
 	local version_plain="${version%-release}"
 	if [ "$version_plain" = "$version" ] && [[ "$version" == *-* ]]; then
@@ -611,16 +611,48 @@ dl_uptodown() {
 		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi
 		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
 	done
+	if [ "$found_version" != true ]; then
+		# Fallback for localized Uptodown pages exposing direct links such as /dw-telecharger/<id>.
+		local direct_links dl_link dl_page fallback_link="" fallback_page=""
+		direct_links=$({
+			$HTMLQ --base "$uptodown_dlurl" --attribute href "a" <<<"$__UPTODOWN_RESP__" 2>/dev/null || :
+			$HTMLQ --base "$uptodown_dlurl" --attribute href "a" <<<"$__UPTODOWN_RESP_PKG__" 2>/dev/null || :
+		} | grep -E '/(dw-telecharger|download)/[0-9]+' | awk '!seen[$0]++' || :)
+		while IFS= read -r dl_link; do
+			[ -z "$dl_link" ] && continue
+			dl_page=$(req "$dl_link" - 2>/dev/null || true)
+			[ -z "$dl_page" ] && continue
+			if [ -z "$fallback_page" ]; then
+				fallback_page="$dl_page"
+				fallback_link="$dl_link"
+			fi
+			if grep -qiF "$version" <<<"$dl_page" || grep -qiF "$version_plain" <<<"$dl_page"; then
+				direct_page_url="$dl_link"
+				resp="$dl_page"
+				found_version=true
+				break
+			fi
+		done <<<"$direct_links"
+		if [ "$found_version" != true ] && [ -n "$fallback_page" ]; then
+			direct_page_url="$fallback_link"
+			resp="$fallback_page"
+			found_version=true
+		fi
+		[ -n "$direct_page_url" ] && pr "Uptodown direct page fallback selected: ${direct_page_url}"
+	fi
 	if [ "$found_version" != true ]; then return 1; fi
-	if [ -z "$versionURL" ]; then return 1; fi
-	versionURL=$(jq -e -r '
-		if (.extraURL // "") == "" then
-			.url + "/" + (.versionID | tostring)
-		else
-			.url + "/" + .extraURL + "/" + (.versionID | tostring)
-		end
-	' <<<"$versionURL")
-	resp=$(req "$versionURL" -) || return 1
+	if [ -z "$direct_page_url" ]; then
+		if [ -z "$versionURL" ]; then return 1; fi
+		versionURL=$(jq -e -r '
+			if (.extraURL // "") == "" then
+				.url + "/" + (.versionID | tostring)
+			else
+				.url + "/" + .extraURL + "/" + (.versionID | tostring)
+			end
+		' <<<"$versionURL")
+		resp=$(req "$versionURL" -) || return 1
+		direct_page_url="$versionURL"
+	fi
 
 	local data_version files node_arch data_file_id file_type
 	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || return 1
@@ -663,7 +695,9 @@ dl_uptodown() {
 	# dw.uptodown.com exige un Referer de la page Uptodown (sinon 404)
 	local dw_url="https://dw.uptodown.com/dwn/${data_url}"
 	local referer
-	if [ -n "${data_file_id-}" ]; then
+	if [ -n "$direct_page_url" ]; then
+		referer="$direct_page_url"
+	elif [ -n "${data_file_id-}" ]; then
 		referer="${uptodown_dlurl}/download/${data_file_id}-x"
 	else
 		referer="${uptodown_dlurl}/"
@@ -675,7 +709,17 @@ dl_uptodown() {
 		req_with_referer "$referer" "$dw_url" "$output"
 	fi
 }
-get_uptodown_pkg_name() { $HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)" <<<"$__UPTODOWN_RESP_PKG__"; }
+get_uptodown_pkg_name() {
+	local pkg
+	pkg=$($HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)" <<<"$__UPTODOWN_RESP_PKG__" 2>/dev/null || true)
+	if [ -z "$pkg" ]; then
+		pkg=$(sed -n 's/.*"packageName":"\([^"]\+\)".*/\1/p' <<<"$__UPTODOWN_RESP__" | head -1)
+	fi
+	if [ -z "$pkg" ]; then
+		pkg=$(sed -n 's/.*\b\(com\.[A-Za-z0-9._-]\+\)\b.*/\1/p' <<<"$__UPTODOWN_RESP_PKG__" | head -1)
+	fi
+	[ -n "$pkg" ] && echo "$pkg"
+}
 
 # -------------------- archive --------------------
 dl_archive() {
@@ -716,11 +760,38 @@ get_mirror_resp() {
 
 	if [[ "$dav_url" == *"/remote.php/dav/public-files/"* ]]; then
 		host="${dav_url%%/remote.php/dav/public-files/*}"
-		r=$(_req "${dav_url%/}/" - -X PROPFIND -H "Depth: 1") || return 1
+		if [ -z "${token-}" ] && [[ "$dav_url" =~ /remote\.php/dav/public-files/([^/?#]+) ]]; then
+			token="${BASH_REMATCH[1]}"
+		fi
+		r=$(_req "${dav_url%/}/" - -X PROPFIND -H "Depth: 1" 2>/dev/null || :)
+		if [ -z "$r" ]; then
+			r=$(_req "${dav_url%/}/" - -X PROPFIND -H "Depth: 1" \
+				-H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+				-H "Accept: text/xml,application/xml,*/*;q=0.8" \
+				-H "Referer: ${host}/s/${token}" 2>/dev/null || :)
+		fi
+		if [ -z "$r" ] && [ -n "${token-}" ]; then
+			r=$(_req "${dav_url%/}/" - -u "${token}:" -X PROPFIND -H "Depth: 1" 2>/dev/null || :)
+		fi
+		if [ -z "$r" ] && [ -n "${token-}" ]; then
+			r=$(_req "${dav_url%/}/" - -u "${token}:" -X PROPFIND -H "Depth: 1" \
+				-H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+				-H "Accept: text/xml,application/xml,*/*;q=0.8" \
+				-H "Referer: ${host}/s/${token}" 2>/dev/null || :)
+		fi
+		[ -n "$r" ] || return 1
 		__MIRROR_RESP__=$(sed -n 's;.*<d:href>\(.*\)</d:href>.*;\1;p' <<<"$r" | while IFS= read -r href; do
 			if [[ "$href" == */ ]]; then continue; fi
 			case "${href,,}" in
-				*.apk|*.apkm|*.xapk) echo "${host}${href}" ;;
+				*.apk|*.apkm|*.xapk)
+					if [[ "$href" =~ ^https?:// ]]; then
+						echo "$href"
+					elif [[ "$href" == /* ]]; then
+						echo "${host}${href}"
+					else
+						echo "${dav_url%/}/${href}"
+					fi
+					;;
 			esac
 		done)
 	else
