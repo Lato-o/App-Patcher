@@ -676,6 +676,107 @@ get_archive_resp() {
 }
 get_archive_vers() { sed 's/^[^-]*-//;s/-\(all\|arm64-v8a\|arm-v7a\)\.apk//g' <<<"$__ARCHIVE_RESP__"; }
 get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
+
+# -------------------- mirror --------------------
+get_mirror_resp() {
+	local url="${1%%\?*}" dav_url host token r
+	url="${url%/}"
+	if [[ "$url" =~ ^(https?://[^/]+)/s/([^/?#]+) ]]; then
+		host="${BASH_REMATCH[1]}"
+		token="${BASH_REMATCH[2]}"
+		dav_url="${host}/remote.php/dav/public-files/${token}"
+	else
+		dav_url="$url"
+	fi
+
+	if [[ "$dav_url" == *"/remote.php/dav/public-files/"* ]]; then
+		host="${dav_url%%/remote.php/dav/public-files/*}"
+		r=$(_req "${dav_url%/}/" - -X PROPFIND -H "Depth: 1") || return 1
+		__MIRROR_RESP__=$(sed -n 's;.*<d:href>\(.*\)</d:href>.*;\1;p' <<<"$r" | while IFS= read -r href; do
+			if [[ "$href" == */ ]]; then continue; fi
+			case "${href,,}" in
+				*.apk|*.apkm|*.xapk) echo "${host}${href}" ;;
+			esac
+		done)
+	else
+		r=$(req "$url" -) || return 1
+		__MIRROR_RESP__=$($HTMLQ --base "$url" --attribute href "a" <<<"$r" 2>/dev/null | grep -Ei '\.(apk|apkm|xapk)(\?.*)?$' || true)
+	fi
+	[ -n "$__MIRROR_RESP__" ]
+}
+get_mirror_pkg_name() {
+	local file fname stem pkg
+	while IFS= read -r file; do
+		fname="${file##*/}"
+		fname="${fname%%\?*}"
+		case "${fname,,}" in
+			*.apk|*.apkm|*.xapk) ;;
+			*) continue ;;
+		esac
+		stem="${fname%.*}"
+		pkg="${stem%%[-_]*}"
+		if [[ "$pkg" == *.* ]]; then
+			echo "$pkg"
+			return 0
+		fi
+	done <<<"$__MIRROR_RESP__"
+	return 1
+}
+get_mirror_vers() {
+	local pkg file fname stem rem ver
+	pkg=$(get_mirror_pkg_name) || return 1
+	while IFS= read -r file; do
+		fname="${file##*/}"
+		fname="${fname%%\?*}"
+		case "${fname,,}" in
+			*.apk|*.apkm|*.xapk) ;;
+			*) continue ;;
+		esac
+		stem="${fname%.*}"
+		if [[ "$stem" == "${pkg}_"* ]]; then
+			rem="${stem#${pkg}_}"
+		elif [[ "$stem" == "${pkg}-"* ]]; then
+			rem="${stem#${pkg}-}"
+		else
+			continue
+		fi
+		ver="${rem%%[_ ]*}"
+		ver="${ver%%-release*}"
+		if [[ "$ver" == *-* ]]; then ver="${ver%%-*}"; fi
+		[ -n "$ver" ] && echo "$ver"
+	done <<<"$__MIRROR_RESP__" | awk '!seen[$0]++'
+}
+dl_mirror() {
+	local _url="$1" version="$2" output="$3" _arch="$4" _dpi="$5"
+	local file picked="" picked_ext="" ext
+	local version_f=${version// /}
+	version_f=${version_f#v}
+	local version_l=${version_f,,}
+	local version_dash=${version_l//./-}
+	local version_underscore=${version_l//./_}
+
+	for ext in apk apkm xapk; do
+		while IFS= read -r file; do
+			local fname="${file##*/}" fname_nq fname_l
+			fname_nq="${fname%%\?*}"
+			fname_l="${fname_nq,,}"
+			[[ "$fname_l" != *.${ext} ]] && continue
+			if [[ "$fname_l" == *"$version_l"* || "$fname_l" == *"$version_dash"* || "$fname_l" == *"$version_underscore"* ]]; then
+				picked="$file"
+				picked_ext="$ext"
+				break 2
+			fi
+		done <<<"$__MIRROR_RESP__"
+	done
+	[ -z "$picked" ] && return 1
+
+	if [ "$picked_ext" = "apk" ]; then
+		req "$picked" "$output"
+	else
+		req "$picked" "${output}.apkm" || return 1
+		merge_splits "${output}.apkm" "${output}"
+	fi
+}
 # --------------------------------------------------
 
 patch_apk() {
@@ -721,11 +822,11 @@ build_rv() {
 	local tried_dl=()
 	# Morphe patches require a true universal APK for resources, prefer archive before uptodown.
 	if [[ "${args[patches_src],,}" == morpheapp/* ]]; then
-		dl_source_order="apkmirror archive uptodown"
+		dl_source_order="apkmirror archive uptodown mirror"
 		uptodown_apk_only=true
 	else
 		# Ordre par défaut : apkmirror d'abord, puis uptodown, puis archive en repli
-		dl_source_order="apkmirror uptodown archive"
+		dl_source_order="apkmirror uptodown archive mirror"
 	fi
 	for dl_p in $dl_source_order; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi

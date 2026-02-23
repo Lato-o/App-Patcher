@@ -126,7 +126,11 @@ for table_name in $(toml_get_table_names); do
 		app_args[archive_dlurl]=${app_args[archive_dlurl]%/}
 		app_args[dl_from]=archive
 	} || app_args[archive_dlurl]=""
-	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'apkmirror_dlurl', 'uptodown_dlurl' or 'archive_dlurl' option was set for '$table_name'."; fi
+	app_args[mirror_dlurl]=$(toml_get "$t" mirror-dlurl) && {
+		app_args[mirror_dlurl]=${app_args[mirror_dlurl]%/}
+		app_args[dl_from]=mirror
+	} || app_args[mirror_dlurl]=""
+	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'apkmirror_dlurl', 'uptodown_dlurl', 'archive_dlurl' or 'mirror_dlurl' option was set for '$table_name'."; fi
 	app_args[arch]=$(toml_get "$t" arch) || app_args[arch]="all"
 	if [ "${app_args[arch]}" != "both" ] && [ "${app_args[arch]}" != "all" ] && [[ ${app_args[arch]} != "arm64-v8a"* ]] && [[ ${app_args[arch]} != "arm-v7a"* ]]; then
 		abort "wrong arch '${app_args[arch]}' for '$table_name'"
