@@ -956,7 +956,7 @@ build_rv() {
 		fi
 	fi
 
-	local version_f stock_apk split_resigned_marker
+	local version_f stock_apk split_resigned_marker successful_source=""
 	local downloaded_ok=false
 	for version in "${version_candidates[@]}"; do
 		pr "Choosing version '${version}' for ${table}"
@@ -970,6 +970,7 @@ build_rv() {
 		fi
 		if [ -f "$stock_apk" ]; then
 			downloaded_ok=true
+			successful_source="cache"
 			break
 		fi
 		for dl_p in $dl_source_order; do
@@ -992,6 +993,8 @@ build_rv() {
 				continue
 			fi
 			downloaded_ok=true
+			successful_source="$dl_p"
+			pr "Download successful for '${table}' via ${successful_source}"
 			break
 		done
 		[ "$downloaded_ok" = true ] && break
@@ -999,7 +1002,12 @@ build_rv() {
 	if [ "$downloaded_ok" != true ]; then
 		return 0
 	fi
-	log "${table}: ${version}"
+	if [ -n "$successful_source" ]; then
+		log "${table}: ${version} [source: ${successful_source}]"
+		pr "Using source '${successful_source}' for ${table}"
+	else
+		log "${table}: ${version}"
+	fi
 
 	local microg_patch
 	microg_patch=$(grep "^Name: " <<<"$list_patches" | grep -i "gmscore\|microg" || :) microg_patch=${microg_patch#*: }
