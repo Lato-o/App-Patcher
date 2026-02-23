@@ -408,12 +408,14 @@ dl_apkmirror() {
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-        local resp node app_table apkmname dlurl="" vlink vslug version_pattern all_links
-        # Normaliser la version pour la recherche (2025.05.27-release -> 2025-05-27-release)
-        vslug="${version//./-}-release"
+        local resp node app_table apkmname dlurl="" vlink version_dash version_core version_pattern all_links
+        # Normaliser la version pour la recherche sans dupliquer le suffixe -release
+        # 2025.05.27-release -> 2025-05-27-release
+        version_dash="${version//./-}"
+        version_core="${version_dash%-release}"
+        version_pattern="${version_core}-release"
         # Chercher tous les liens de version dans la page et trouver celui qui correspond
         # Format attendu: .../app-slug-2025-05-27-release-release/ ou .../app-slug-2025-05-27-release/
-        version_pattern="${vslug}"
         # Extraire tous les liens de la page (dans la section ALL VERSIONS)
         all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
         if [ -n "$all_links" ]; then
@@ -478,7 +480,7 @@ dl_apkmirror() {
             # Repli: utiliser l'ancien calcul à partir du titre si aucun lien direct trouvé
             apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
             apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-            url="${url}/${apkmname}-${version//./-}-release/"
+            url="${url}/${apkmname}-${version_pattern}/"
         fi
 		resp=$(req "$url" -) || return 1
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
@@ -561,7 +563,7 @@ dl_uptodown() {
 		version_plain="${version%%-*}"
 	fi
 	local found_version=false empty_pages=0
-	for ((i = 1; i <= 120; i++)); do
+	for ((i = 1; i <= 300; i++)); do
 		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" - 2>/dev/null || true)
 		if [ -z "$resp" ]; then
 			empty_pages=$((empty_pages + 1))
@@ -611,7 +613,7 @@ dl_uptodown() {
 			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || return 1
 			if [ -z "$node_arch" ]; then return 1; fi
 			if [ "$accept_any_arch" != true ] && ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi
-			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || return 1
+			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files" | tr '[:upper:]' '[:lower:]' | xargs) || return 1
 			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || return 1
 			if [ -z "$data_file_id" ]; then continue; fi
 			if [ "$file_type" = "apk" ]; then
