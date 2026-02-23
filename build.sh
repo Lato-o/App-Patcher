@@ -60,6 +60,7 @@ gh_dl "${MODULE_TEMPLATE_DIR}/bin/x86/cmpr" "https://github.com/j-hc/cmpr/releas
 gh_dl "${MODULE_TEMPLATE_DIR}/bin/x64/cmpr" "https://github.com/j-hc/cmpr/releases/latest/download/cmpr-x86_64"
 
 declare -A cliriplib
+BUILD_FAILED_JOBS=0
 idx=0
 for table_name in $(toml_get_table_names); do
 	if [ -z "$table_name" ]; then continue; fi
@@ -68,7 +69,9 @@ for table_name in $(toml_get_table_names); do
 	vtf "$enabled" "enabled"
 	if [ "$enabled" = false ]; then continue; fi
 	if ((idx >= PARALLEL_JOBS)); then
-		wait -n
+		if ! wait -n; then
+			BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+		fi
 		idx=$((idx - 1))
 	fi
 
@@ -79,7 +82,8 @@ for table_name in $(toml_get_table_names); do
 	cli_ver=$(toml_get "$t" cli-version) || cli_ver=$DEF_CLI_VER
 
 	if ! RVP="$(get_rv_prebuilts "$cli_src" "$cli_ver" "$patches_src" "$patches_ver")"; then
-		abort "could not download rv prebuilts"
+		epr "could not download rv prebuilts for '${table_name}', skipping this app"
+		continue
 	fi
 	read -r rv_cli_jar rv_patches_jar <<<"$RVP"
 	app_args[cli]=$rv_cli_jar
@@ -153,7 +157,9 @@ for table_name in $(toml_get_table_names); do
 		app_args[arch]="arm-v7a"
 		app_args[module_prop_name]="${module_prop_name_b}-arm"
 		if ((idx >= PARALLEL_JOBS)); then
-			wait -n
+			if ! wait -n; then
+				BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+			fi
 			idx=$((idx - 1))
 		fi
 		idx=$((idx + 1))
@@ -168,8 +174,16 @@ for table_name in $(toml_get_table_names); do
 		build_rv "$(declare -p app_args)" &
 	fi
 done
-wait
+while ((idx > 0)); do
+	if ! wait -n; then
+		BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+	fi
+	idx=$((idx - 1))
+done
 rm -rf temp/tmp.*
+if ((BUILD_FAILED_JOBS > 0)); then
+	epr "${BUILD_FAILED_JOBS} build job(s) failed, continuing with successful outputs."
+fi
 if [ -z "$(ls -A1 "${BUILD_DIR}")" ]; then abort "All builds failed."; fi
 
 log "\nInstall [Microg](https://github.com/ReVanced/GmsCore/releases) for non-root YouTube and YT Music APKs"

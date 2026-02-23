@@ -343,6 +343,25 @@ get_patch_last_supported_ver() {
 	grep -F "($pcount patch" <<<"$op" | sed 's/ (.* patch.*//' | get_highest_ver || return 1
 }
 
+get_patch_supported_vers() {
+	local rv_cli_jar=$1 rv_patches_jar=$2 pkg_name=$3
+	local op pcount vers
+	if ! op=$(java -jar "$rv_cli_jar" list-versions "$rv_patches_jar" -f "$pkg_name" 2>&1 | tail -n +3 | awk '{$1=$1}1'); then
+		epr "list-versions: '$op'"
+		return 1
+	fi
+	if [ "$op" = "Any" ]; then
+		return 0
+	fi
+	pcount=$(head -1 <<<"$op")
+	pcount=${pcount#*(}
+	pcount=${pcount% *}
+	if [ -z "$pcount" ]; then return 1; fi
+	vers=$(grep -F "($pcount patch" <<<"$op" | sed 's/ (.* patch.*//' | awk '!seen[$0]++' || :)
+	[ -n "$vers" ] || return 1
+	echo "$vers"
+}
+
 isoneof() {
 	local i=$1 v
 	shift
@@ -850,6 +869,7 @@ build_rv() {
 	local dl_from=${args[dl_from]}
 	local arch=${args[arch]}
 	local arch_f="${arch// /}"
+	local rv_cli_jar=${args[cli]} rv_patches_jar=${args[ptjar]}
 	local uptodown_apk_only=false
 
 	local p_patcher_args=()
@@ -882,13 +902,17 @@ build_rv() {
 		return 0
 	fi
 	local list_patches
-	list_patches=$(java -jar "$rv_cli_jar" list-patches "$rv_patches_jar" -f "$pkg_name" -v -p 2>&1)
+	if ! list_patches=$(java -jar "$rv_cli_jar" list-patches "$rv_patches_jar" -f "$pkg_name" -v -p 2>&1); then
+		epr "list-patches failed for ${table}: ${list_patches}"
+		return 0
+	fi
 
 	local get_latest_ver=false
 	if [ "$version_mode" = auto ]; then
 		if ! version=$(get_patch_last_supported_ver "$list_patches" "$pkg_name" \
 			"${args[included_patches]}" "${args[excluded_patches]}" "${args[exclusive_patches]}"); then
-			exit 1
+			epr "Could not resolve a supported version for ${table}."
+			return 0
 		elif [ -z "$version" ]; then get_latest_ver=true; fi
 	elif isoneof "$version_mode" latest beta; then
 		get_latest_ver=true
@@ -898,8 +922,12 @@ build_rv() {
 		p_patcher_args+=("-f")
 	fi
 	if [ $get_latest_ver = true ]; then
+		local pkgvers
 		if [ "$version_mode" = beta ]; then __AAV__="true"; else __AAV__="false"; fi
-		pkgvers=$(get_"${dl_from}"_vers)
+		if ! pkgvers=$(get_"${dl_from}"_vers); then
+			epr "Could not fetch versions for ${table} from ${dl_from}."
+			return 0
+		fi
 		version=$(get_highest_ver <<<"$pkgvers") || version=$(head -1 <<<"$pkgvers")
 	fi
 	if [ -z "$version" ]; then
@@ -915,26 +943,45 @@ build_rv() {
 		build_mode_arr=(apk module)
 	fi
 
-	pr "Choosing version '${version}' for ${table}"
-	local version_f=${version// /}
-	version_f=${version_f#v}
-	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
-	local split_resigned_marker="${stock_apk}.merged-splits-resigned"
-	if [ -f "$stock_apk" ] && ! validate_stock_apk "$stock_apk" "$pkg_name" "cache"; then
-		epr "Cached apk is invalid for ${table}, retrying with mirrors."
-		rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
+	local version_candidates=("$version")
+	if [ "$version_mode" = auto ] && [ "$get_latest_ver" = false ]; then
+		local compat_vers candidate
+		if compat_vers=$(get_patch_supported_vers "$rv_cli_jar" "$rv_patches_jar" "$pkg_name"); then
+			while IFS= read -r candidate; do
+				[ -z "$candidate" ] && continue
+				if ! isoneof "$candidate" "${version_candidates[@]}"; then
+					version_candidates+=("$candidate")
+				fi
+			done <<<"$compat_vers"
+		fi
 	fi
-	if [ ! -f "$stock_apk" ]; then
-		local downloaded_ok=false
+
+	local version_f stock_apk split_resigned_marker
+	local downloaded_ok=false
+	for version in "${version_candidates[@]}"; do
+		pr "Choosing version '${version}' for ${table}"
+		version_f=${version// /}
+		version_f=${version_f#v}
+		stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
+		split_resigned_marker="${stock_apk}.merged-splits-resigned"
+		if [ -f "$stock_apk" ] && ! validate_stock_apk "$stock_apk" "$pkg_name" "cache"; then
+			epr "Cached apk is invalid for ${table}, retrying with mirrors."
+			rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
+		fi
+		if [ -f "$stock_apk" ]; then
+			downloaded_ok=true
+			break
+		fi
 		for dl_p in $dl_source_order; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 			pr "Downloading '${table}' from ${dl_p}"
 			rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
-			if ! isoneof $dl_p "${tried_dl[@]}"; then
+			if ! isoneof "$dl_p" "${tried_dl[@]}"; then
 				if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; then
 					epr "ERROR: Could not query ${table} from ${dl_p}"
 					continue
 				fi
+				tried_dl+=("$dl_p")
 			fi
 			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
 				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
@@ -947,9 +994,10 @@ build_rv() {
 			downloaded_ok=true
 			break
 		done
-		if [ "$downloaded_ok" != true ]; then
-			return 0
-		fi
+		[ "$downloaded_ok" = true ] && break
+	done
+	if [ "$downloaded_ok" != true ]; then
+		return 0
 	fi
 	log "${table}: ${version}"
 
