@@ -683,6 +683,10 @@ get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
 get_mirror_resp() {
 	local url="${1%%\?*}" dav_url host token r
 	url="${url%/}"
+	if [[ "${url,,}" =~ \.(apk|apkm|xapk)(\?.*)?$ ]]; then
+		__MIRROR_RESP__="$url"
+		return 0
+	fi
 	if [[ "$url" =~ ^(https?://[^/]+)/s/([^/?#]+) ]]; then
 		host="${BASH_REMATCH[1]}"
 		token="${BASH_REMATCH[2]}"
@@ -770,7 +774,19 @@ dl_mirror() {
 			fi
 		done <<<"$__MIRROR_RESP__"
 	done
-	[ -z "$picked" ] && return 1
+		if [ -z "$picked" ]; then
+		if [ "$(grep -c . <<<"$__MIRROR_RESP__")" -eq 1 ]; then
+			picked=$(head -1 <<<"$__MIRROR_RESP__")
+			case "${picked,,}" in
+				*.apk|*.apk\?*) picked_ext="apk" ;;
+				*.apkm|*.apkm\?*) picked_ext="apkm" ;;
+				*.xapk|*.xapk\?*) picked_ext="xapk" ;;
+				*) return 1 ;;
+			esac
+		else
+			return 1
+		fi
+	fi
 
 	if [ "$picked_ext" = "apk" ]; then
 		req "$picked" "$output"
@@ -796,10 +812,30 @@ patch_apk() {
 check_sig() {
 	local file=$1 pkg_name=$2
 	local sig
-	if grep -q "$pkg_name" sig.txt; then
-		sig=$(java -jar "$APKSIGNER" verify --print-certs "$file" | grep ^Signer | grep SHA-256 | tail -1 | awk '{print $NF}')
-		echo "$pkg_name signature: ${sig}"
-		grep -qFx "$sig $pkg_name" sig.txt
+	if ! grep -q "$pkg_name" sig.txt; then return 0; fi
+	sig=$(java -jar "$APKSIGNER" verify --print-certs "$file" | grep ^Signer | grep SHA-256 | tail -1 | awk '{print $NF}')
+	echo "$pkg_name signature: ${sig}"
+	grep -qFx "$sig $pkg_name" sig.txt
+}
+
+validate_stock_apk() {
+	local file=$1 pkg_name=$2 source_label=$3
+	local op
+	if [ ! -s "$file" ]; then
+		epr "${pkg_name} not building, empty apk from ${source_label}: '$file'"
+		return 1
+	fi
+	if ! unzip -tqq "$file" >/dev/null 2>&1; then
+		epr "${pkg_name} not building, invalid apk archive from ${source_label}: '$file'"
+		return 1
+	fi
+	if [ -f "${file}.merged-splits-resigned" ]; then
+		pr "Skipping stock signature check for ${pkg_name} (merged split APK was re-signed during preprocessing)"
+		return 0
+	fi
+	if ! op=$(check_sig "$file" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$op"; then
+		epr "${pkg_name} not building, apk signature mismatch from ${source_label} '$file': $op"
+		return 1
 	fi
 }
 
@@ -884,24 +920,34 @@ build_rv() {
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
 	local split_resigned_marker="${stock_apk}.merged-splits-resigned"
+	if [ -f "$stock_apk" ] && ! validate_stock_apk "$stock_apk" "$pkg_name" "cache"; then
+		epr "Cached apk is invalid for ${table}, retrying with mirrors."
+		rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
+	fi
 	if [ ! -f "$stock_apk" ]; then
+		local downloaded_ok=false
 		for dl_p in $dl_source_order; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 			pr "Downloading '${table}' from ${dl_p}"
-			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
+			rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
+			if ! isoneof $dl_p "${tried_dl[@]}"; then
+				if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; then
+					epr "ERROR: Could not query ${table} from ${dl_p}"
+					continue
+				fi
+			fi
 			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
 				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
 				continue
 			fi
+			if ! validate_stock_apk "$stock_apk" "$pkg_name" "$dl_p"; then
+				rm -f "$stock_apk" "$split_resigned_marker" "${stock_apk}.apkm" || :
+				continue
+			fi
+			downloaded_ok=true
 			break
 		done
-		if [ ! -f "$stock_apk" ]; then return 0; fi
-	fi
-	if [ -f "$split_resigned_marker" ]; then
-		pr "Skipping stock signature check for ${pkg_name} (merged split APK was re-signed during preprocessing)"
-	else
-		if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
-			epr "$pkg_name not building, apk signature mismatch '$stock_apk': $OP"
+		if [ "$downloaded_ok" != true ]; then
 			return 0
 		fi
 	fi
