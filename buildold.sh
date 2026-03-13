@@ -2,7 +2,7 @@
 
 set -euo pipefail
 shopt -s nullglob
-trap "rm -rf temp/*tmp.* temp/*/*tmp.* temp/*-temporary-files; kill 0; exit 130" INT
+trap "rm -rf temp/*tmp.* temp/*/*tmp.* temp/*-temporary-files; exit 130" INT
 
 if [ "${1-}" = "clean" ]; then
 	rm -rf temp build logs build.md
@@ -67,7 +67,9 @@ for table_name in $(toml_get_table_names); do
 	vtf "$enabled" "enabled"
 	if [ "$enabled" = false ]; then continue; fi
 	if ((idx >= PARALLEL_JOBS)); then
-		wait -n
+		if ! wait -n; then
+			BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+		fi
 		idx=$((idx - 1))
 	fi
 
@@ -77,12 +79,25 @@ for table_name in $(toml_get_table_names); do
 	cli_src=$(toml_get "$t" cli-source) || cli_src=$DEF_CLI_SRC
 	cli_ver=$(toml_get "$t" cli-version) || cli_ver=$DEF_CLI_VER
 
-	if ! PREBUILTS="$(get_prebuilts "$cli_src" "$cli_ver" "$patches_src" "$patches_ver")"; then
-		abort "could not download rv prebuilts"
+	if ! RVP="$(get_rv_prebuilts "$cli_src" "$cli_ver" "$patches_src" "$patches_ver")"; then
+		epr "could not download rv prebuilts for '${table_name}', skipping this app"
+		continue
 	fi
-	read -r cli_jar patches_jar <<<"$PREBUILTS"
-	app_args[cli]=$cli_jar
-	app_args[ptjar]=$patches_jar
+	read -r rv_cli_jar rv_patches_jar <<<"$RVP"
+	app_args[cli]=$rv_cli_jar
+	app_args[ptjar]=$rv_patches_jar
+	app_args[patches_src]=$patches_src
+	app_args[patches_ver]=$patches_ver
+	if [[ -v cliriplib[${app_args[cli]}] ]]; then app_args[riplib]=${cliriplib[${app_args[cli]}]}; else
+		if [[ $(java -jar "${app_args[cli]}" patch 2>&1) == *rip-lib* ]]; then
+			cliriplib[${app_args[cli]}]=true
+			app_args[riplib]=true
+		else
+			cliriplib[${app_args[cli]}]=false
+			app_args[riplib]=false
+		fi
+	fi
+	if [ "${app_args[riplib]}" = "true" ] && [ "$(toml_get "$t" riplib)" = "false" ]; then app_args[riplib]=false; fi
 	app_args[rv_brand]=$(toml_get "$t" rv-brand) || app_args[rv_brand]=$DEF_RV_BRAND
 
 	app_args[excluded_patches]=$(toml_get "$t" excluded-patches) || app_args[excluded_patches]=""
@@ -99,20 +114,27 @@ for table_name in $(toml_get_table_names); do
 			abort "ERROR: build-mode '${app_args[build_mode]}' is not a valid option for '${table_name}': only 'both', 'apk' or 'module' is allowed"
 		fi
 	} || app_args[build_mode]=apk
-
-	for dl_from in "direct" "uptodown" "apkmirror" "archive"; do
-		if app_args[${dl_from}_dlurl]=$(toml_get "$t" ${dl_from}-dlurl); then
-			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%/}
-			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%download}
-			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%/}
-			app_args[dl_from]=${dl_from}
-		else
-			app_args[${dl_from}_dlurl]=""
-		fi
-	done
-	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'apkmirror-dlurl', 'uptodown-dlurl' or 'archive-dlurl' option was set for '$table_name'."; fi
+	app_args[uptodown_dlurl]=$(toml_get "$t" uptodown-dlurl) && {
+		app_args[uptodown_dlurl]=${app_args[uptodown_dlurl]%/}
+		app_args[uptodown_dlurl]=${app_args[uptodown_dlurl]%download}
+		app_args[uptodown_dlurl]=${app_args[uptodown_dlurl]%/}
+		app_args[dl_from]=uptodown
+	} || app_args[uptodown_dlurl]=""
+	app_args[apkmirror_dlurl]=$(toml_get "$t" apkmirror-dlurl) && {
+		app_args[apkmirror_dlurl]=${app_args[apkmirror_dlurl]%/}
+		app_args[dl_from]=apkmirror
+	} || app_args[apkmirror_dlurl]=""
+	app_args[archive_dlurl]=$(toml_get "$t" archive-dlurl) && {
+		app_args[archive_dlurl]=${app_args[archive_dlurl]%/}
+		app_args[dl_from]=archive
+	} || app_args[archive_dlurl]=""
+	app_args[mirror_dlurl]=$(toml_get "$t" mirror-dlurl) && {
+		app_args[mirror_dlurl]=${app_args[mirror_dlurl]%/}
+		app_args[dl_from]=mirror
+	} || app_args[mirror_dlurl]=""
+	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'apkmirror_dlurl', 'uptodown_dlurl', 'archive_dlurl' or 'mirror_dlurl' option was set for '$table_name'."; fi
 	app_args[arch]=$(toml_get "$t" arch) || app_args[arch]="all"
-	if ! isoneof "${app_args[arch]}" "both" "all" "arm64-v8a" "arm-v7a" "x86_64" "x86"; then
+	if [ "${app_args[arch]}" != "both" ] && [ "${app_args[arch]}" != "all" ] && [[ ${app_args[arch]} != "arm64-v8a"* ]] && [[ ${app_args[arch]} != "arm-v7a"* ]]; then
 		abort "wrong arch '${app_args[arch]}' for '$table_name'"
 	fi
 
@@ -133,7 +155,9 @@ for table_name in $(toml_get_table_names); do
 		app_args[arch]="arm-v7a"
 		app_args[module_prop_name]="${module_prop_name_b}-arm"
 		if ((idx >= PARALLEL_JOBS)); then
-			wait -n
+			if ! wait -n; then
+				BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+			fi
 			idx=$((idx - 1))
 		fi
 		idx=$((idx + 1))
@@ -148,14 +172,22 @@ for table_name in $(toml_get_table_names); do
 		build_rv "$(declare -p app_args)" &
 	fi
 done
-wait
+while ((idx > 0)); do
+	if ! wait -n; then
+		BUILD_FAILED_JOBS=$((BUILD_FAILED_JOBS + 1))
+	fi
+	idx=$((idx - 1))
+done
 rm -rf temp/tmp.*
+if ((BUILD_FAILED_JOBS > 0)); then
+	epr "${BUILD_FAILED_JOBS} build job(s) failed, continuing with successful outputs."
+fi
 if [ -z "$(ls -A1 "${BUILD_DIR}")" ]; then abort "All builds failed."; fi
 
 log "\nInstall [Microg](https://github.com/ReVanced/GmsCore/releases) for non-root YouTube and YT Music APKs"
-log "Use [zygisk-detach](https://github.com/j-hc/zygisk-detach) to detach YouTube and YT Music modules from Play Store"
+log "Use [zygisk-detach](https://github.com/j-hc/zygisk-detach) to detach root ReVanced YouTube and YT Music from Play Store"
 log "\n[revanced-magisk-module](https://github.com/j-hc/revanced-magisk-module)\n"
-log "$(cat "$TEMP_DIR"/*/changelog.md)"
+log "$(cat "$TEMP_DIR"/*-rv/changelog.md)"
 
 SKIPPED=$(cat "$TEMP_DIR"/skipped 2>/dev/null || :)
 if [ -n "$SKIPPED" ]; then

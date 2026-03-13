@@ -1,4 +1,4 @@
-enable-magisk-update = true # set this to false if you do not want to receive updates for the module in magisk app
+enable-module-update = true # set this to false if you do not want to receive updates for the module
 parallel-jobs = 1
 
 # add 'enabled = false' for not patching a specific app or remove it from the config
@@ -6,140 +6,52 @@ parallel-jobs = 1
 
 # you can use rvmm-config-gen to generate a config
 
-[YouTube]
-enabled = false
-build-mode = "both"
-excluded-patches = ""
-included-patches = ""
-version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
-uptodown-dlurl = "https://youtube.en.uptodown.com/android"
-archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
-
-[Music]
-enabled = false
-build-mode = "both"
-arch = "both"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
-uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
-archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
-
-[GooglePhotos]
-enabled = false
-build-mode = "both"
-arch = "both"
-version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
-uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
-archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.photos"
-
-[Spotify]
-enabled = false
-uptodown-dlurl = "https://spotify.en.uptodown.com/android"
-archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.spotify.music"
-
-# https://github.com/j-hc/revanced-magisk-module/issues/554
-[Music-Extended]
-enabled = false
-app-name = "Music"
-patches-source = "inotia00/revanced-patches"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
-build-mode = "both"
-arch = "both"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
-
-[YouTube-Extended]
-enabled = false
-app-name = "YouTube"
-patches-source = "anddea/revanced-patches"
-cli-source = "inotia00/revanced-cli"
-rv-brand = "ReVanced Extended"
-build-mode = "module"
-#module-prop-name= "Youtube Revanced Extended"
-patches-version = "dev"
-arch = "arm64-v8a"
-included-patches = """\
-'Custom header for YouTube' \
-'Hide Shorts dimming' \
-'Hide shortcuts' \
-'MaterialYou' \
-"""
-riplib = true
-excluded-patches = """\
-'Custom branding icon for YouTube' \
-'Custom branding name for YouTube' \
-"""
-patcher-args = "-e 'Visual preferences icons for YouTube' -OsettingsMenuIcon=gear -e 'Settings for YouTube' -OrvxSettingsLabel='ReVanced Extended' -e 'Snackbar components' -OdarkThemeBackgroundColor=@android:color/black"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
-
-
-[YoutubeMusic-Extended]
-enabled = false
-app-name = "YouTube Music"
-patches-source = "anddea/revanced-patches"
-cli-source = "inotia00/revanced-cli"
-patches-version = "dev"
-rv-brand = "ReVanced Extended"
-build-mode = "module"
-included-patches = """\
-'Custom header for YouTube Music' \
-'Disable music video in album' \
-'Hide overlay filter' \
-'Hide player overlay filter' \
-"""
-excluded-patches = """\
-'Dark theme' \
-'Custom branding name for YouTube Music' \
-"""
-patcher-args = "-e 'Visual preferences icons for YouTube Music' -OsettingsMenuIcon=gear -e 'Settings for YouTube Music' -OrvxSettingsLabel='ReVanced Extended'"
-arch = "arm64-v8a"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
-
-[Soundcloud]
-enabled = true
-apkmirror-dlurl = "https://www.apkmirror.com/apk/soundcloud/soundcloud-soundcloud"
-uptodown-dlurl = "https://soundcloud.fr.uptodown.com/android"
-mirror-dlurl = "https://cloud.lato.world/s/QiXKDKwRyUpesWB"
-patches-source = "revanced/revanced-patches"
-build-mode = "apk"
-#arch = "arm64-v8a"
-cli-source = "revanced/revanced-cli"
-
 [YouTube-Morphe]
 app-name = "YouTube"
 patches-source = "MorpheApp/morphe-patches"
+patches-version = "dev"
 cli-source = "MorpheApp/morphe-cli"
 rv-brand = "Morphe"
 build-mode = "both"
-version = "auto"
-excluded-patches = """\
-    'Custom branding name for YouTube' \
-    'Custom branding icon for YouTube' \
-    """
-arch = "arm64-v8a"
-included-patches = ""
-patches-version = "dev"
+arch = "arm64-v8a" 
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
-
 
 [Music-Morphe]
 app-name = "Music"
 patches-source = "MorpheApp/morphe-patches"
+patches-version = "dev"
 cli-source = "MorpheApp/morphe-cli"
 rv-brand = "Morphe"
 build-mode = "both"
-version = "auto"
-excluded-patches = """\
-    'Custom branding name for YouTube Music' \
-    'Custom branding icon for YouTube Music' \
-    """
-included-patches = ""
-arch = "arm64-v8a"
-patches-version = "dev"
+arch = "arm64-v8a" 
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.youtube.music"
 
+[Reddit-Morphe]
+enabled = false
+app-name = "Reddit"
+rv-brand = "Morphe"
+build-mode = "both"
+patches-source = "MorpheApp/morphe-patches"
+cli-source = "MorpheApp/morphe-cli"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/redditinc/reddit/"
+archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.reddit.frontpage"
+uptodown-dlurl = "https://reddit-official-app.en.uptodown.com/android"
+dpi = "120-640dpi"
+
+[GooglePhotos]
+build-mode = "both"
+arch = "arm64-v8a"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
+uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
+archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.apps.photos"
+
+
+[Twitch]
+enabled = false
+apkmirror-dlurl = "https://www.apkmirror.com/apk/twitch-interactive-inc/twitch/"
+uptodown-dlurl = "https://twitch.en.uptodown.com/android"
+# archive-dlurl = "https://archive.org/download/jhc-apks/apks/tv.twitch.android.app"
