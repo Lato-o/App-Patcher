@@ -675,11 +675,43 @@ build_rv() {
 
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
-		local patches_ver="${patches_jar##*-}"
+		local patches_src=${args[patches_src]}
+		local patches_ver=${args[patches_ver]}
+		local rv_patches_ver=""
+		
+		# Récupérer le tag_name depuis l'API GitHub
+		local rv_rel="https://api.github.com/repos/${patches_src}/releases"
+		if [ "$patches_ver" = "dev" ]; then
+			local resp
+			resp=$(gh_req "$rv_rel" -) || rv_patches_ver="dev"
+			if [ -n "$resp" ]; then
+				rv_patches_ver=$(jq -e -r '.[0] | .tag_name' <<<"$resp" 2>/dev/null || echo "dev")
+			fi
+		elif [ "$patches_ver" = "latest" ]; then
+			local resp
+			resp=$(gh_req "$rv_rel/latest" -) || rv_patches_ver="latest"
+			if [ -n "$resp" ]; then
+				rv_patches_ver=$(jq -e -r '.tag_name' <<<"$resp" 2>/dev/null || echo "latest")
+			fi
+		else
+			# Version spécifique, utiliser directement avec le préfixe "v" si nécessaire
+			if [[ ! "$patches_ver" =~ ^v ]]; then
+				rv_patches_ver="v${patches_ver}"
+			else
+				rv_patches_ver="$patches_ver"
+			fi
+		fi
+		
+		# Si on n'a pas réussi à récupérer depuis l'API, essayer depuis le nom du fichier
+		if [ -z "$rv_patches_ver" ] || [ "$rv_patches_ver" = "dev" ] || [ "$rv_patches_ver" = "latest" ]; then
+			local patches_file=$(basename "$rv_patches_jar")
+			rv_patches_ver=$(cut -d'-' -f3- <<<"$patches_file")
+			rv_patches_ver="v${rv_patches_ver%.rvp}"
+		fi
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \
-			"${version} (patches ${patches_ver})" \
+			"${version} (patches ${rv_patches_ver})" \
 			"${app_name} ${args[rv_brand]} module" \
 			"https://raw.githubusercontent.com/${GITHUB_REPOSITORY-}/update/${upj}" \
 			"$base_template"
