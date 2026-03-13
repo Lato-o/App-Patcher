@@ -676,7 +676,6 @@ build_rv() {
 		module_config "$base_template" "$pkg_name" "$version" "$arch"
 
 		local patches_ver="${patches_jar##*-}"
-		
 		module_prop \
 			"${args[module_prop_name]}" \
 			"${app_name} ${args[rv_brand]}" \
@@ -715,7 +714,7 @@ module_prop() {
 name=${2}
 version=v${3}
 versionCode=${NEXT_VER_CODE}
-author=Lato-o
+author=j-hc
 description=${4}" >"${6}/module.prop"
 
 	if [ "$ENABLE_MODULE_UPDATE" = true ]; then echo "updateJson=${5}" >>"${6}/module.prop"; fi
