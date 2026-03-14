@@ -1,7 +1,6 @@
 # Morphe builder
 
 - Root & non-root builds (.zip & .apk)
-- Only arm64-v8a
 - Dev patches
 - Daily update 
 
