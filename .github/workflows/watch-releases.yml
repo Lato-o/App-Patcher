@@ -15,8 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check ReVanced patches releases
-        id: check_revanced
+      - name: Check patches releases and trigger build once
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -24,151 +23,57 @@ jobs:
             const fs = require('fs');
             const path = require('path');
 
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: 'ReVanced',
-              repo: 'revanced-patches',
-              per_page: 1
-            });
+            const sources = [
+              { owner: 'ReVanced', repo: 'revanced-patches', tagFile: '.last-revanced-tag', label: 'ReVanced' },
+              { owner: 'anddea', repo: 'revanced-patches', tagFile: '.last-anddea-tag', label: 'anddea' },
+              { owner: 'MorpheApp', repo: 'morphe-patches', tagFile: '.last-morphe-tag', label: 'MorpheApp' },
+            ];
 
-            if (releases.length > 0) {
-              const latestRelease = releases[0];
-              const releaseTag = latestRelease.tag_name;
-              
-              // Lire la dernière release vérifiée depuis un fichier
-              const lastCheckedFile = path.join(process.cwd(), '.last-revanced-tag');
+            let needsBuild = false;
+
+            for (const src of sources) {
+              const { data: releases } = await github.rest.repos.listReleases({
+                owner: src.owner,
+                repo: src.repo,
+                per_page: 1,
+              });
+
+              if (releases.length === 0) continue;
+
+              const releaseTag = releases[0].tag_name;
+              const lastCheckedFile = path.join(process.cwd(), src.tagFile);
               let lastCheckedTag = '';
               try {
                 if (fs.existsSync(lastCheckedFile)) {
                   lastCheckedTag = fs.readFileSync(lastCheckedFile, 'utf8').trim();
                 }
               } catch (e) {
-                console.log('Fichier de dernière release non trouvé, première exécution');
+                console.log(`Fichier ${src.tagFile} non trouvé, première exécution`);
               }
-              
+
               if (releaseTag !== lastCheckedTag) {
-                console.log(`Nouvelle release ReVanced détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
-                
-                // Sauvegarder la nouvelle release
+                console.log(`Nouvelle release ${src.label} détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
                 fs.writeFileSync(lastCheckedFile, releaseTag);
-                
-                // Déclencher directement le workflow de build
-                const { data: repo } = await github.rest.repos.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
-                });
-                await github.rest.actions.createWorkflowDispatch({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  workflow_id: 'build.yml',
-                  ref: repo.default_branch || 'main'
-                });
+                needsBuild = true;
               } else {
-                console.log(`Pas de nouvelle release ReVanced. Dernière: ${releaseTag}`);
+                console.log(`Pas de nouvelle release ${src.label}. Dernière: ${releaseTag}`);
               }
             }
 
-      - name: Check anddea patches releases
-        id: check_anddea
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: 'anddea',
-              repo: 'revanced-patches',
-              per_page: 1
-            });
-
-            if (releases.length > 0) {
-              const latestRelease = releases[0];
-              const releaseTag = latestRelease.tag_name;
-              
-              // Lire la dernière release vérifiée depuis un fichier
-              const lastCheckedFile = path.join(process.cwd(), '.last-anddea-tag');
-              let lastCheckedTag = '';
-              try {
-                if (fs.existsSync(lastCheckedFile)) {
-                  lastCheckedTag = fs.readFileSync(lastCheckedFile, 'utf8').trim();
-                }
-              } catch (e) {
-                console.log('Fichier de dernière release non trouvé, première exécution');
-              }
-              
-              if (releaseTag !== lastCheckedTag) {
-                console.log(`Nouvelle release anddea détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
-                
-                // Sauvegarder la nouvelle release
-                fs.writeFileSync(lastCheckedFile, releaseTag);
-                
-                // Déclencher directement le workflow de build
-                const { data: repo } = await github.rest.repos.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
-                });
-                await github.rest.actions.createWorkflowDispatch({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  workflow_id: 'build.yml',
-                  ref: repo.default_branch || 'main'
-                });
-              } else {
-                console.log(`Pas de nouvelle release anddea. Dernière: ${releaseTag}`);
-              }
-            }
-
-      - name: Check MorpheApp patches releases
-        id: check_morphe
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: 'MorpheApp',
-              repo: 'morphe-patches',
-              per_page: 1
-            });
-
-            if (releases.length > 0) {
-              const latestRelease = releases[0];
-              const releaseTag = latestRelease.tag_name;
-              
-              // Lire la dernière release vérifiée depuis un fichier
-              const lastCheckedFile = path.join(process.cwd(), '.last-morphe-tag');
-              let lastCheckedTag = '';
-              try {
-                if (fs.existsSync(lastCheckedFile)) {
-                  lastCheckedTag = fs.readFileSync(lastCheckedFile, 'utf8').trim();
-                }
-              } catch (e) {
-                console.log('Fichier de dernière release non trouvé, première exécution');
-              }
-              
-              if (releaseTag !== lastCheckedTag) {
-                console.log(`Nouvelle release MorpheApp détectée: ${releaseTag} (ancienne: ${lastCheckedTag || 'aucune'})`);
-                
-                // Sauvegarder la nouvelle release
-                fs.writeFileSync(lastCheckedFile, releaseTag);
-                
-                // Déclencher directement le workflow de build
-                const { data: repo } = await github.rest.repos.get({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
-                });
-                await github.rest.actions.createWorkflowDispatch({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  workflow_id: 'build.yml',
-                  ref: repo.default_branch || 'main'
-                });
-              } else {
-                console.log(`Pas de nouvelle release MorpheApp. Dernière: ${releaseTag}`);
-              }
+            if (needsBuild) {
+              const { data: repo } = await github.rest.repos.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'build.yml',
+                ref: repo.default_branch || 'main',
+              });
+              console.log('Un seul dispatch vers build.yml (au moins une source a changé).');
+            } else {
+              console.log('Aucun changement de release, pas de build déclenché.');
             }
 
       - name: Commit last checked tags
