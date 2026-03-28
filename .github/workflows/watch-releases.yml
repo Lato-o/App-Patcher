@@ -24,7 +24,6 @@ jobs:
             const path = require('path');
 
             const sources = [
-              { owner: 'ReVanced', repo: 'revanced-patches', tagFile: '.last-revanced-tag', label: 'ReVanced' },
               { owner: 'anddea', repo: 'revanced-patches', tagFile: '.last-anddea-tag', label: 'anddea' },
               { owner: 'MorpheApp', repo: 'morphe-patches', tagFile: '.last-morphe-tag', label: 'MorpheApp' },
             ];
