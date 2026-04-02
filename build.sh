@@ -2,14 +2,15 @@
 
 set -euo pipefail
 shopt -s nullglob
-trap "rm -rf temp/*tmp.* temp/*/*tmp.* temp/*-temporary-files; kill 0; exit 130" INT
-
-if [ "${1-}" = "clean" ]; then
-	rm -rf temp build logs build.md
-	exit 0
-fi
 
 source utils.sh
+
+trap "abort" INT
+
+if [ "${1-}" = "clean" ]; then
+	rm -r "$TEMP_DIR" "$BUILD_DIR" build.md
+	exit 0
+fi
 
 jq --version >/dev/null || abort "\`jq\` is not installed. install it with 'apt install jq' or equivalent"
 java --version >/dev/null || abort "\`openjdk 17\` is not installed. install it with 'apt install openjdk-17-jre' or equivalent"
@@ -78,13 +79,12 @@ for table_name in $(toml_get_table_names); do
 	cli_ver=$(toml_get "$t" cli-version) || cli_ver=$DEF_CLI_VER
 
 	if ! PREBUILTS="$(get_prebuilts "$cli_src" "$cli_ver" "$patches_src" "$patches_ver")"; then
-		abort "could not download rv prebuilts"
+		epr "Could not get prebuilts"
+		continue
 	fi
 	read -r cli_jar patches_jar <<<"$PREBUILTS"
 	app_args[cli]=$cli_jar
 	app_args[ptjar]=$patches_jar
-	app_args[patches_src]=$patches_src
-	app_args[patches_ver]=$patches_ver
 	app_args[rv_brand]=$(toml_get "$t" rv-brand) || app_args[rv_brand]=$DEF_RV_BRAND
 
 	app_args[excluded_patches]=$(toml_get "$t" excluded-patches) || app_args[excluded_patches]=""
@@ -102,8 +102,8 @@ for table_name in $(toml_get_table_names); do
 		fi
 	} || app_args[build_mode]=apk
 
-	for dl_from in "direct" "uptodown" "apkmirror" "archive"; do
-		if app_args[${dl_from}_dlurl]=$(toml_get "$t" ${dl_from}-dlurl); then
+	for dl_from in "${DL_SRCS[@]}"; do
+		if app_args[${dl_from}_dlurl]=$(toml_get "$t" "${dl_from}-dlurl"); then
 			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%/}
 			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%download}
 			app_args[${dl_from}_dlurl]=${app_args[${dl_from}_dlurl]%/}
@@ -112,7 +112,7 @@ for table_name in $(toml_get_table_names); do
 			app_args[${dl_from}_dlurl]=""
 		fi
 	done
-	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'apkmirror-dlurl', 'uptodown-dlurl' or 'archive-dlurl' option was set for '$table_name'."; fi
+	if [ -z "${app_args[dl_from]-}" ]; then abort "ERROR: no 'dlurl' option was set for '$table_name'. (${DL_SRCS[*]})"; fi
 	app_args[arch]=$(toml_get "$t" arch) || app_args[arch]="all"
 	if ! isoneof "${app_args[arch]}" "both" "all" "arm64-v8a" "arm-v7a" "x86_64" "x86"; then
 		abort "wrong arch '${app_args[arch]}' for '$table_name'"
