@@ -705,9 +705,12 @@ build_rv() {
 		
 		# Si on n'a pas réussi à récupérer depuis l'API, essayer depuis le nom du fichier
 		if [ -z "$rv_patches_ver" ] || [ "$rv_patches_ver" = "dev" ] || [ "$rv_patches_ver" = "latest" ]; then
-			local patches_file=$(basename "$rv_patches_jar")
+			local patches_file
+			patches_file=$(basename "${args[ptjar]}")
 			rv_patches_ver=$(cut -d'-' -f3- <<<"$patches_file")
-			rv_patches_ver="v${rv_patches_ver%.rvp}"
+			rv_patches_ver="${rv_patches_ver%.rvp}"
+			rv_patches_ver="${rv_patches_ver%.mpp}"
+			rv_patches_ver="v${rv_patches_ver}"
 		fi
 		module_prop \
 			"${args[module_prop_name]}" \
