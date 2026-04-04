@@ -1,6 +1,6 @@
 {
-  "version": "v8.44.54 (patches dev.3.mpp)",
-  "versionCode": 102,
-  "zipUrl": "https://github.com/Lato-o/App-Patcher/releases/download/102/music-morphe-module-v8.44.54-arm64-v8a.zip",
+  "version": "v8.44.54 (patches dev.4.mpp)",
+  "versionCode": 103,
+  "zipUrl": "https://github.com/Lato-o/App-Patcher/releases/download/103/music-morphe-module-v8.44.54-arm64-v8a.zip",
   "changelog": "https://raw.githubusercontent.com/Lato-o/App-Patcher/update/build.md"
 }
